@@ -121,6 +121,10 @@ elif page == "Afternoon Schedule":
         st.subheader("3. Vid 2")
         st.markdown("**[Video Placeholder for Vid 2]**")
 
+    with st.container():
+        st.markdown("### 📘 DUOLINGO")
+        st.checkbox("100 - 150 XP completed", key="duolingo_afternoon")
+
 elif page == "Classroom Studies":
     st.title("📚 Classroom Studies")
     task = st.text_input("Enter your study topic for today:")
