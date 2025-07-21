@@ -90,7 +90,7 @@ if page == "Home":
     """, unsafe_allow_html=True)
 
     st.markdown("""
-    <div style='background-color:#e6ffe6;padding:15px;border-radius:10px;margin-top:10px;'>
+    <div style='background-color:#e6ffe6;color:#000000;padding:15px;border-radius:10px;margin-top:10px;'>
         <h4>📘 DUOLINGO</h4>
         <label>
             <input type='checkbox' style='margin-right:10px;'>100 - 150 XP completed
@@ -104,7 +104,7 @@ elif page == "Afternoon Schedule":
 
     # Morning Exercise - Light Grey
     st.markdown("""
-    <div style='background-color:#f5f5f5;padding:20px;border-radius:10px;margin-top:25px;'>
+    <div style='background-color:#f5f5f5;color:#000000;padding:20px;border-radius:10px;margin-top:25px;'>
         <h4>🏃‍♂️ Morning 30 min Exercise</h4>
         <ul>
             <li>Pushups 30</li>
@@ -117,7 +117,7 @@ elif page == "Afternoon Schedule":
 
     # Jawline Routine - Light Red
     st.markdown("""
-    <div style='background-color:#ffe6e6;padding:20px;border-radius:10px;margin-top:25px;'>
+    <div style='background-color:#ffe6e6;color:#000000;padding:20px;border-radius:10px;margin-top:25px;'>
         <h4>😁 Jawline Routine</h4>
         <h5>1. Warm Up</h5>
         <ul>
@@ -134,7 +134,7 @@ elif page == "Afternoon Schedule":
 
     # Duolingo - Light Green
     st.markdown("""
-    <div style='background-color:#e6ffe6;padding:20px;border-radius:10px;margin-top:25px;'>
+    <div style='background-color:#e6ffe6;color:#000000;padding:20px;border-radius:10px;margin-top:25px;'>
         <h4>📘 DUOLINGO</h4>
     </div>
     """, unsafe_allow_html=True)
