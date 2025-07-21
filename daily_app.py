@@ -6,9 +6,23 @@ import json
 import os
 import calendar
 
+# --- Date Utility for Always-Up-to-date Today ---
+def get_today_date():  # returns "YYYY-MM-DD"
+    return datetime.date.today().isoformat()
+
+def get_now_datetime():
+    return datetime.datetime.now()
+
+def get_display_date():
+    d = get_now_datetime()
+    return d.strftime('%A, %d %B %Y')
+
 st.set_page_config(layout="wide", page_title="Daily Tracker")
 
-# --- Helper Functions for Persistence ---
+########################
+# --- Data Handling ---#
+########################
+
 def load_data():
     if os.path.exists("data.json"):
         with open("data.json", "r") as f:
@@ -20,8 +34,7 @@ def load_data():
         "duolingo_records": {},
         "morning_exercise_records": {},
         "jawline_records": {},
-        "dairy_records": {},            # Add dairy entries by day
-        "last_reset_date": ""
+        "dairy_records": {}
     }
 
 def save_data():
@@ -33,14 +46,14 @@ def save_data():
             "duolingo_records": st.session_state.duolingo_records,
             "morning_exercise_records": st.session_state.morning_exercise_records,
             "jawline_records": st.session_state.jawline_records,
-            "dairy_records": st.session_state.dairy_records,
-            "last_reset_date": st.session_state.last_reset_date
+            "dairy_records": st.session_state.dairy_records
         }, f)
 
-# --- Session Setup ---
+###############################
+# --- Session State Setups ---#
+###############################
+
 data = load_data()
-if "page" not in st.session_state:
-    st.session_state.page = "Home"
 if "classroom_tasks" not in st.session_state:
     st.session_state.classroom_tasks = data.get("classroom_tasks", [])
 if "app_updates" not in st.session_state:
@@ -55,27 +68,11 @@ if "jawline_records" not in st.session_state:
     st.session_state.jawline_records = data.get("jawline_records", {})
 if "dairy_records" not in st.session_state:
     st.session_state.dairy_records = data.get("dairy_records", {})
-if "last_reset_date" not in st.session_state:
-    st.session_state.last_reset_date = data.get("last_reset_date", "")
 
-# --- Daily Reset Handler ---
-now = datetime.datetime.now()
-today_date = now.date().isoformat()
-if st.session_state.last_reset_date != today_date:
-    st.session_state['duolingo_check_today'] = False
-    st.session_state['morning_exercise_check_today'] = False
-    st.session_state['jawline_check_today'] = False
-    st.session_state.last_reset_date = today_date
-    save_data()
-else:
-    if 'duolingo_check_today' not in st.session_state:
-        st.session_state['duolingo_check_today'] = False
-    if 'morning_exercise_check_today' not in st.session_state:
-        st.session_state['morning_exercise_check_today'] = False
-    if 'jawline_check_today' not in st.session_state:
-        st.session_state['jawline_check_today'] = False
+#######################
+# --- Navigation ---  #
+#######################
 
-# --- Sidebar Navigation ---
 st.sidebar.title("📘 Navigation")
 page = st.sidebar.radio("Go to", [
     "Home",
@@ -89,36 +86,36 @@ page = st.sidebar.radio("Go to", [
     "Stored Data",
     "App Update"
 ])
-st.session_state.page = page
 
-# --- Top Header ---
+#########################
+# -- Top Header/Clock --#
+#########################
+
 col1, col2 = st.columns([3, 1])
 with col1:
-    st.markdown(f"## 📅 Today's Date: {now.strftime('%A, %d %B %Y')}")
+    st.markdown(f"## 📅 Today's Date: {get_display_date()}")
 with col2:
     timer_placeholder = st.empty()
 
-# --- Digital Clock ---
 def update_clock():
     while True:
-        clock = datetime.datetime.now().strftime("%H:%M:%S")
         timer_placeholder.markdown(
-            f"<div style='text-align:right;font-size:20px;background:#000000;color:#39FF14;padding:8px;border-radius:8px;'>🕒 Timers: {clock}</div>",
+            f"<div style='text-align:right;font-size:20px;background:#000000;color:#39FF14;padding:8px;border-radius:8px;'>🕒 Timers: {get_now_datetime().strftime('%H:%M:%S')}</div>",
             unsafe_allow_html=True
         )
         time.sleep(1)
-
 thread = threading.Thread(target=update_clock)
 thread.daemon = True
 thread.start()
 
-# --- Helper for Calendar Rendering ---
+##############################
+# -- Calendar Helper Func  --#
+##############################
 def render_activity_calendar(record_dict, year, month, title):
     month_cal = calendar.monthcalendar(year, month)
     days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     tick = "<span style='color:green;font-size:22px;'>&#10003;</span>"
     cross = "<span style='color:red;font-size:22px;'>&#10007;</span>"
-
     table_html = f"<table style='width:100%;text-align:center;font-size:16px;'><tr>"
     for d in days:
         table_html += f"<th style='padding:2px 8px 2px 8px;'>{d}</th>"
@@ -136,80 +133,40 @@ def render_activity_calendar(record_dict, year, month, title):
     table_html += "</table>"
     st.markdown(f"##### {title}")
     st.markdown(table_html, unsafe_allow_html=True)
-    
-# --- Dairy calendar for selection and display ---
-def render_dairy_calendar(dairy_records, year, month):
-    # Month grid
-    month_cal = calendar.monthcalendar(year, month)
-    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    st.markdown("##### Division 4: Dairy Calendar")
-    st.write("Click a date below to view its dairy entry.")
-    # For interactivity, use buttons in a grid
-    date_clicked = None
-    grid = []
-    for week in month_cal:
-        row = []
-        for day in week:
-            if day == 0:
-                row.append(st.empty())
-            else:
-                day_date = datetime.date(year, month, day).isoformat()
-                if dairy_records.get(day_date):
-                    # Entry exists
-                    label = f"{day} 📝"
-                    color = "white"
-                    bg = "#39FF14"
-                else:
-                    label = str(day)
-                    color = "#888"
-                    bg = "#eee"
-                row.append(st.button(label,
-                                    key=f"dairycal_{year}{month}{day}",
-                                    help="Show entry" if dairy_records.get(day_date) else "No entry",
-                                    kwargs={'style':f"color:{color};background:{bg}"})
-                )
-        grid.append(row)
-        
-    # Position-wise manual callback
-    day_found = None
-    for wi, week in enumerate(month_cal):
-        for di, day in enumerate(week):
-            if day == 0:
-                continue
-            if st.session_state.get(f'dairycal_{year}{month}{day}', False):
-                day_found = datetime.date(year, month, day).isoformat()
-    return day_found
 
-# --- Pages ---
+##############################
+# -------- Pages -----------  #
+##############################
+
 if page == "Home":
     st.title("🏠 Welcome to Your Daily App")
     for i in range(1, 7):
         st.markdown(f"<div style='background-color:#d0ebff;padding:15px;border-radius:10px;margin-top:10px;'>🔹 Section {i}</div>", unsafe_allow_html=True)
     st.markdown("""<hr style='margin-top:30px;margin-bottom:10px;border:1px solid #ccc;'>""", unsafe_allow_html=True)
     st.markdown("""
-    <div style='font-size:16px;color:#888;'>
-        <strong>#At Night</strong><br>
-        Update dairy / Twitter / Git<br>
-        Check mails / LinkedIn / Organisation / Instagram<br>
-        (search / commitChanges)<br>
-        - &nbsp;&nbsp;&nbsp; - &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; - &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -
-    </div>
+        <div style='font-size:16px;color:#888;'>
+            <strong>#At Night</strong><br>
+            Update dairy / Twitter / Git<br>
+            Check mails / LinkedIn / Organisation / Instagram<br>
+            (search / commitChanges)<br>
+            - &nbsp;&nbsp;&nbsp; - &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; - &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -
+        </div>
     """, unsafe_allow_html=True)
-
     st.markdown("""
-    <div style='background-color:#e6ffe6;color:#000000;padding:15px;border-radius:10px;margin-top:10px;'>
-        <h4>📘 DUOLINGO</h4>
-        <label>
-            <input type='checkbox' style='margin-right:10px;'>100 - 150 XP completed
-        </label>
-    </div>
+        <div style='background-color:#e6ffe6;color:#000000;padding:15px;border-radius:10px;margin-top:10px;'>
+            <h4>📘 DUOLINGO</h4>
+            <label>
+                <input type='checkbox' style='margin-right:10px;'>100 - 150 XP completed
+            </label>
+        </div>
     """, unsafe_allow_html=True)
 
 elif page == "Afternoon Schedule":
     st.title("🕑 Afternoon Schedule")
     st.write("Add your afternoon tasks or routines here.")
+    today_date = get_today_date()  # Always fresh
 
-    # ========== 1. Morning Exercise ===========
+    # --- 1. Morning Exercise ---
     exc_col1, exc_col2 = st.columns([6,1])
     with exc_col1:
         st.markdown("""
@@ -224,13 +181,13 @@ elif page == "Afternoon Schedule":
         </div>
         """, unsafe_allow_html=True)
     with exc_col2:
-        checked = st.checkbox("✔️ Completed", key=f"morning_exercise_check_{today_date}", value=st.session_state.get('morning_exercise_check_today', False))
-        if 'morning_exercise_check_today' not in st.session_state or st.session_state['morning_exercise_check_today'] != checked:
-            st.session_state['morning_exercise_check_today'] = checked
+        checked = st.checkbox("✔️ Completed", key=f"morning_exercise_check_{today_date}",
+                              value=st.session_state.morning_exercise_records.get(today_date, False))
+        if st.session_state.morning_exercise_records.get(today_date, False) != checked:
             st.session_state.morning_exercise_records[today_date] = checked
             save_data()
 
-    # ========== 2. Jawline Routine ===========
+    # --- 2. Jawline Routine ---
     jaw_col1, jaw_col2 = st.columns([6,1])
     with jaw_col1:
         st.markdown("""
@@ -249,24 +206,26 @@ elif page == "Afternoon Schedule":
         </div>
         """, unsafe_allow_html=True)
     with jaw_col2:
-        checked = st.checkbox("✔️ Completed", key=f"jawline_check_{today_date}", value=st.session_state.get('jawline_check_today', False))
-        if 'jawline_check_today' not in st.session_state or st.session_state['jawline_check_today'] != checked:
-            st.session_state['jawline_check_today'] = checked
+        checked = st.checkbox("✔️ Completed", key=f"jawline_check_{today_date}",
+                              value=st.session_state.jawline_records.get(today_date, False))
+        if st.session_state.jawline_records.get(today_date, False) != checked:
             st.session_state.jawline_records[today_date] = checked
             save_data()
 
-    # ========== 3. Duolingo Section ===========
+    # --- 3. Duolingo Section ---
     st.markdown("""
     <div style='background-color:#e6ffe6;color:#000000;padding:20px;border-radius:10px;margin-top:25px;'>
         <h4>📘 DUOLINGO</h4>
     </div>
     """, unsafe_allow_html=True)
-    duolingo_checked = st.checkbox("100 - 150 XP completed", key=f"duolingo_afternoon_{today_date}", value=st.session_state.get('duolingo_check_today', False))
-    if 'duolingo_check_today' not in st.session_state or st.session_state['duolingo_check_today'] != duolingo_checked:
-        st.session_state['duolingo_check_today'] = duolingo_checked
+    duolingo_checked = st.checkbox("100 - 150 XP completed",
+                                   key=f"duolingo_afternoon_{today_date}",
+                                   value=st.session_state.duolingo_records.get(today_date, False))
+    if st.session_state.duolingo_records.get(today_date, False) != duolingo_checked:
         st.session_state.duolingo_records[today_date] = duolingo_checked
         save_data()
 
+    # --- Classroom Studies Section ---
     st.markdown("""<hr style='margin-top:35px;margin-bottom:10px;border:1px solid #ccc;'>""", unsafe_allow_html=True)
     st.markdown("""<div style='background-color:#d0ebff;padding:18px 15px 12px 15px;border-radius:10px;margin-top:10px;'>
         <h4>📚 Classroom Studies</h4>
@@ -310,7 +269,7 @@ elif page == "Time Reminder":
 elif page == "Dairy":
     st.title("📖 Dairy Entry")
     st.markdown("Write your thoughts, experience, or a journal entry for today. (Saved per day, viewable later)")
-    # Show today's saved value if it exists
+    today_date = get_today_date()  # Always up-to-date!
     old_val = st.session_state.dairy_records.get(today_date, "")
     new_val = st.text_area("Your Dairy for Today:", value=old_val, height=350)
     if st.button("Save Dairy Entry"):
