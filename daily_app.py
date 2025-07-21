@@ -13,12 +13,15 @@ def load_data():
     if os.path.exists("data.json"):
         with open("data.json", "r") as f:
             return json.load(f)
-    # Add new duolingo_records to store checklist per date
+    # Add new *_records to store checklist per date for each division
     return {
         "classroom_tasks": [],
         "app_updates": [],
         "app_ideas": [],
-        "duolingo_records": {}  # {"2025-07-21": true, ...}
+        "duolingo_records": {},         # {"2025-07-21": true, ...}
+        "morning_exercise_records": {}, # {"2025-07-21": true, ...}
+        "jawline_records": {},          # {"2025-07-21": true, ...}
+        "last_reset_date": ""           # Date string for daily auto-reset
     }
 
 def save_data():
@@ -27,12 +30,16 @@ def save_data():
             "classroom_tasks": st.session_state.classroom_tasks,
             "app_updates": st.session_state.app_updates,
             "app_ideas": st.session_state.app_ideas,
-            "duolingo_records": st.session_state.duolingo_records
+            "duolingo_records": st.session_state.duolingo_records,
+            "morning_exercise_records": st.session_state.morning_exercise_records,
+            "jawline_records": st.session_state.jawline_records,
+            "last_reset_date": st.session_state.last_reset_date
         }, f)
 
 # --- Session Setup ---
 data = load_data()
 
+# Data keys and initialization
 if "page" not in st.session_state:
     st.session_state.page = "Home"
 if "classroom_tasks" not in st.session_state:
@@ -43,6 +50,31 @@ if "app_ideas" not in st.session_state:
     st.session_state.app_ideas = data.get("app_ideas", [])
 if "duolingo_records" not in st.session_state:
     st.session_state.duolingo_records = data.get("duolingo_records", {})
+if "morning_exercise_records" not in st.session_state:
+    st.session_state.morning_exercise_records = data.get("morning_exercise_records", {})
+if "jawline_records" not in st.session_state:
+    st.session_state.jawline_records = data.get("jawline_records", {})
+if "last_reset_date" not in st.session_state:
+    st.session_state.last_reset_date = data.get("last_reset_date", "")
+
+# --- Daily Reset Handler ---
+now = datetime.datetime.now()
+today_date = now.date().isoformat()  # e.g. '2025-07-22'
+if st.session_state.last_reset_date != today_date:
+    # Reset checklist for new day (check marks only; not persisted record)
+    st.session_state['duolingo_check_today'] = False
+    st.session_state['morning_exercise_check_today'] = False
+    st.session_state['jawline_check_today'] = False
+    st.session_state.last_reset_date = today_date
+    save_data()
+else:
+    # Make sure the keys exist (initialize if missing after reset)
+    if 'duolingo_check_today' not in st.session_state:
+        st.session_state['duolingo_check_today'] = False
+    if 'morning_exercise_check_today' not in st.session_state:
+        st.session_state['morning_exercise_check_today'] = False
+    if 'jawline_check_today' not in st.session_state:
+        st.session_state['jawline_check_today'] = False
 
 # --- Sidebar Navigation ---
 st.sidebar.title("📘 Navigation")
@@ -62,17 +94,16 @@ st.session_state.page = page
 # --- Top Header ---
 col1, col2 = st.columns([3, 1])
 with col1:
-    today = datetime.date.today()
-    st.markdown(f"## 📅 Today's Date: {today.strftime('%A, %d %B %Y')}")
+    st.markdown(f"## 📅 Today's Date: {now.strftime('%A, %d %B %Y')}")
 with col2:
     timer_placeholder = st.empty()
 
 # --- Digital Clock ---
 def update_clock():
     while True:
-        now = datetime.datetime.now().strftime("%H:%M:%S")
+        clock = datetime.datetime.now().strftime("%H:%M:%S")
         timer_placeholder.markdown(
-            f"<div style='text-align:right;font-size:20px;background:#000000;color:#39FF14;padding:8px;border-radius:8px;'>🕒 Timers: {now}</div>",
+            f"<div style='text-align:right;font-size:20px;background:#000000;color:#39FF14;padding:8px;border-radius:8px;'>🕒 Timers: {clock}</div>",
             unsafe_allow_html=True
         )
         time.sleep(1)
@@ -81,12 +112,36 @@ thread = threading.Thread(target=update_clock)
 thread.daemon = True
 thread.start()
 
+# --- Helper for Calendar Rendering ---
+def render_activity_calendar(record_dict, year, month, title):
+    month_cal = calendar.monthcalendar(year, month)
+    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    tick = "<span style='color:green;font-size:22px;'>&#10003;</span>"
+    cross = "<span style='color:red;font-size:22px;'>&#10007;</span>"
+
+    table_html = f"<table style='width:100%;text-align:center;font-size:16px;'><tr>"
+    for d in days:
+        table_html += f"<th style='padding:2px 8px 2px 8px;'>{d}</th>"
+    table_html += "</tr>"
+    for week in month_cal:
+        table_html += "<tr>"
+        for day in week:
+            if day == 0:
+                table_html += "<td></td>"
+            else:
+                day_date = datetime.date(year, month, day).isoformat()
+                mark = tick if record_dict.get(day_date, False) else cross
+                table_html += f"<td style='padding:7px'>{day}<br>{mark}</td>"
+        table_html += "</tr>"
+    table_html += "</table>"
+    st.markdown(f"##### {title}")
+    st.markdown(table_html, unsafe_allow_html=True)
+
 # --- Pages ---
 if page == "Home":
     st.title("🏠 Welcome to Your Daily App")
     for i in range(1, 7):
         st.markdown(f"<div style='background-color:#d0ebff;padding:15px;border-radius:10px;margin-top:10px;'>🔹 Section {i}</div>", unsafe_allow_html=True)
-
     st.markdown("""<hr style='margin-top:30px;margin-bottom:10px;border:1px solid #ccc;'>""", unsafe_allow_html=True)
     st.markdown("""
     <div style='font-size:16px;color:#888;'>
@@ -111,63 +166,73 @@ elif page == "Afternoon Schedule":
     st.title("🕑 Afternoon Schedule")
     st.write("Add your afternoon tasks or routines here.")
 
-    # Morning Exercise - Light Grey
-    st.markdown("""
-    <div style='background-color:#f5f5f5;color:#000000;padding:20px;border-radius:10px;margin-top:25px;'>
-        <h4>🏃‍♂️ Morning 30 min Exercise</h4>
-        <ul>
-            <li>Pushups 30</li>
-            <li>Crunches 30</li>
-            <li>Side planks or Russian twist 30</li>
-            <li>Bhujangasana 30 sec</li>
-        </ul>
-    </div>
-    """, unsafe_allow_html=True)
+    # ========== 1. Morning Exercise ===========
+    exc_col1, exc_col2 = st.columns([6,1])
+    with exc_col1:
+        st.markdown("""
+        <div style='background-color:#f5f5f5;color:#000000;padding:20px;border-radius:10px;margin-top:25px;'>
+            <h4>🏃‍♂️ Morning 30 min Exercise</h4>
+            <ul>
+                <li>Pushups 30</li>
+                <li>Crunches 30</li>
+                <li>Side planks or Russian twist 30</li>
+                <li>Bhujangasana 30 sec</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    with exc_col2:
+        checked = st.checkbox("✔️ Completed", key=f"morning_exercise_check_{today_date}", value=st.session_state.get('morning_exercise_check_today', False))
+        # Save immediately if checked/unchecked
+        if 'morning_exercise_check_today' not in st.session_state or st.session_state['morning_exercise_check_today'] != checked:
+            st.session_state['morning_exercise_check_today'] = checked
+            st.session_state.morning_exercise_records[today_date] = checked
+            save_data()
 
-    # Jawline Routine - Light Red
-    st.markdown("""
-    <div style='background-color:#ffe6e6;color:#000000;padding:20px;border-radius:10px;margin-top:25px;'>
-        <h4>😁 Jawline Routine</h4>
-        <h5>1. Warm Up</h5>
-        <ul>
-            <li>Upward stretch</li>
-            <li>Face upward rotate 180</li>
-            <li>Stretching face both sides</li>
-        </ul>
-        <h5>2. Vid 1</h5>
-        <p>**[Video Placeholder for Vid 1]**</p>
-        <h5>3. Vid 2</h5>
-        <p>**[Video Placeholder for Vid 2]**</p>
-    </div>
-    """, unsafe_allow_html=True)
+    # ========== 2. Jawline Routine ===========
+    jaw_col1, jaw_col2 = st.columns([6,1])
+    with jaw_col1:
+        st.markdown("""
+        <div style='background-color:#ffe6e6;color:#000000;padding:20px;border-radius:10px;margin-top:25px;'>
+            <h4>😁 Jawline Routine</h4>
+            <h5>1. Warm Up</h5>
+            <ul>
+                <li>Upward stretch</li>
+                <li>Face upward rotate 180</li>
+                <li>Stretching face both sides</li>
+            </ul>
+            <h5>2. Vid 1</h5>
+            <p>**[Video Placeholder for Vid 1]**</p>
+            <h5>3. Vid 2</h5>
+            <p>**[Video Placeholder for Vid 2]**</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with jaw_col2:
+        checked = st.checkbox("✔️ Completed", key=f"jawline_check_{today_date}", value=st.session_state.get('jawline_check_today', False))
+        if 'jawline_check_today' not in st.session_state or st.session_state['jawline_check_today'] != checked:
+            st.session_state['jawline_check_today'] = checked
+            st.session_state.jawline_records[today_date] = checked
+            save_data()
 
-    # Duolingo - Light Green
+    # ========== 3. Duolingo Section (existing) ===========
     st.markdown("""
     <div style='background-color:#e6ffe6;color:#000000;padding:20px;border-radius:10px;margin-top:25px;'>
         <h4>📘 DUOLINGO</h4>
     </div>
     """, unsafe_allow_html=True)
-
-    # Track Duolingo checklist for today in calendar
-    today_str = datetime.date.today().isoformat()
-    duolingo_done = st.checkbox("100 - 150 XP completed", key=f"duolingo_afternoon_{today_str}")
-
-    # Save state if checked/unchecked
-    prev_val = st.session_state.duolingo_records.get(today_str, None)
-    # If it's newly changed, or not present, save
-    if duolingo_done != prev_val:
-        st.session_state.duolingo_records[today_str] = duolingo_done
+    duolingo_checked = st.checkbox("100 - 150 XP completed", key=f"duolingo_afternoon_{today_date}", value=st.session_state.get('duolingo_check_today', False))
+    if 'duolingo_check_today' not in st.session_state or st.session_state['duolingo_check_today'] != duolingo_checked:
+        st.session_state['duolingo_check_today'] = duolingo_checked
+        st.session_state.duolingo_records[today_date] = duolingo_checked
         save_data()
 
+    # --- Classroom Studies Section ---
     st.markdown("""<hr style='margin-top:35px;margin-bottom:10px;border:1px solid #ccc;'>""", unsafe_allow_html=True)
-    # --- New Classroom Studies Section ---
     st.markdown("""<div style='background-color:#d0ebff;padding:18px 15px 12px 15px;border-radius:10px;margin-top:10px;'>
         <h4>📚 Classroom Studies</h4>
         <div style='color:#333;font-size:15px;margin-bottom:8px;'>
             Track your daily study topics and dates.
         </div>
     </div>""", unsafe_allow_html=True)
-
     with st.form(key="classroom_studies_form"):
         task = st.text_input("Enter your study topic for today:")
         date = st.date_input("Select the date for this task")
@@ -229,47 +294,23 @@ elif page == "Details and Portfolio":
 
 elif page == "Stored Data":
     st.title("🗃️ Stored Data")
-    st.markdown("#### Six divisions are shown below. First division: Your Duolingo Checklist Calendar")
+    today = datetime.date.today()
+    year, month = today.year, today.month
 
     # -- Division 1: Duolingo Checklist Calendar --
-    st.markdown("##### Division 1: <span style='color:#39FF14'>Duolingo Activity Calendar</span>", unsafe_allow_html=True)
-
-    # Calendar for current month
-    today = datetime.date.today()
-    year = today.year
-    month = today.month
-
-    duolingo_records = st.session_state.duolingo_records
-
-    month_cal = calendar.monthcalendar(year, month)
-    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
-    # Prepare for colored icons: green tick, red cross
-    tick = "<span style='color:green;font-size:22px;'>&#10003;</span>"
-    cross = "<span style='color:red;font-size:22px;'>&#10007;</span>"
-
-    # Render the calendar table with tick/cross for each day
-    table_html = f"<table style='width:100%;text-align:center;font-size:16px;'><tr>"
-    for d in days:
-        table_html += f"<th style='padding:2px 8px 2px 8px;'>{d}</th>"
-    table_html += "</tr>"
-
-    for week in month_cal:
-        table_html += "<tr>"
-        for day in week:
-            if day == 0:
-                table_html += "<td></td>"
-            else:
-                day_str = datetime.date(year, month, day).isoformat()
-                mark = tick if duolingo_records.get(day_str, False) else cross
-                table_html += f"<td style='padding:7px'>{day}<br>{mark}</td>"
-        table_html += "</tr>"
-    table_html += "</table>"
-    st.markdown(table_html, unsafe_allow_html=True)
+    render_activity_calendar(st.session_state.duolingo_records, year, month, "Division 1: Duolingo Activity Calendar")
     st.info("A green tick means Duolingo checklist was marked as completed for that day. A red cross means it was not done.")
 
-    # -- Division 2 to 6: Placeholders --
-    for idx in range(2, 7):
+    # -- Division 2: Morning Exercise Calendar --
+    render_activity_calendar(st.session_state.morning_exercise_records, year, month, "Division 2: Morning Exercise Calendar")
+    st.info("A green tick means Morning Exercise was marked completed for that day.")
+
+    # -- Division 3: Jawline Routine Calendar --
+    render_activity_calendar(st.session_state.jawline_records, year, month, "Division 3: Jawline Routine Calendar")
+    st.info("A green tick means Jawline Routine was marked completed for that day.")
+
+    # -- Division 4 to 6: Placeholders --
+    for idx in range(4, 7):
         st.markdown(f"""<div style='background-color:#ffe6e6;padding:15px;border-radius:10px;margin-top:15px;margin-bottom:10px;'>
             <strong>Division {idx}:</strong> <span style='color:#888;'>[Your custom data or tracker here]</span>
         </div>""", unsafe_allow_html=True)
@@ -300,4 +341,3 @@ elif page == "App Update":
             save_data()
         for i, idea in enumerate(st.session_state.app_ideas, 1):
             st.markdown(f"**{i}.** {idea}")
-
