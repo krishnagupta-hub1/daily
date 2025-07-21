@@ -2,18 +2,37 @@ import streamlit as st
 import datetime
 import time
 import threading
+import json
+import os
 
 st.set_page_config(layout="wide", page_title="Daily Tracker")
 
+# --- Helper Functions for Persistence ---
+def load_data():
+    if os.path.exists("data.json"):
+        with open("data.json", "r") as f:
+            return json.load(f)
+    return {"classroom_tasks": [], "app_updates": [], "app_ideas": []}
+
+def save_data():
+    with open("data.json", "w") as f:
+        json.dump({
+            "classroom_tasks": st.session_state.classroom_tasks,
+            "app_updates": st.session_state.app_updates,
+            "app_ideas": st.session_state.app_ideas
+        }, f)
+
 # --- Session Setup ---
+data = load_data()
+
 if "page" not in st.session_state:
     st.session_state.page = "Home"
 if "classroom_tasks" not in st.session_state:
-    st.session_state.classroom_tasks = []
+    st.session_state.classroom_tasks = data["classroom_tasks"]
 if "app_updates" not in st.session_state:
-    st.session_state.app_updates = []
+    st.session_state.app_updates = data["app_updates"]
 if "app_ideas" not in st.session_state:
-    st.session_state.app_ideas = []
+    st.session_state.app_ideas = data["app_ideas"]
 
 # --- Sidebar Navigation ---
 st.sidebar.title("📘 Navigation")
@@ -71,7 +90,8 @@ elif page == "Classroom Studies":
 
     if st.button("Submit Study Task"):
         if task:
-            st.session_state.classroom_tasks.append((task, date))
+            st.session_state.classroom_tasks.append((task, str(date)))
+            save_data()
         else:
             st.warning("Please enter a task before submitting.")
 
@@ -136,8 +156,10 @@ elif page == "App Update":
         todays_update = st.text_input("", placeholder="Today's Update")
         if st.button("Submit Update") and todays_update:
             st.session_state.app_updates.append(todays_update)
+            save_data()
         if st.button("Delete Last Update") and st.session_state.app_updates:
             st.session_state.app_updates.pop()
+            save_data()
         for i, upd in enumerate(st.session_state.app_updates, 1):
             st.markdown(f"**{i}.** {upd}")
 
@@ -145,7 +167,9 @@ elif page == "App Update":
         another_idea = st.text_input(" ", placeholder="Another Idea")
         if st.button("Submit Idea") and another_idea:
             st.session_state.app_ideas.append(another_idea)
+            save_data()
         if st.button("Delete Last Idea") and st.session_state.app_ideas:
             st.session_state.app_ideas.pop()
+            save_data()
         for i, idea in enumerate(st.session_state.app_ideas, 1):
             st.markdown(f"**{i}.** {idea}")
