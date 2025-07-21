@@ -94,6 +94,22 @@ elif page == "Afternoon Schedule":
     st.title("🕑 Afternoon Schedule")
     st.write("Add your afternoon tasks or routines here.")
 
+    with st.container():
+        st.markdown("### 🏃‍♂️ Morning 30 min Exercise")
+        st.markdown("- Pushups 30")
+        st.markdown("- Crunches 30")
+        st.markdown("- Side planks or Russian twist 30")
+        st.markdown("- Bhujangasana 30 sec")
+
+    with st.container():
+        st.markdown("### 😁 Jawline Routine")
+        st.subheader("1. Warm Up")
+        st.markdown("- Upward stretch")
+        st.markdown("- Face upward rotate 180")
+        st.markdown("- Stretching face both sides")
+        st.subheader("2. Vid 1")
+        st.subheader("3. Vid 2")
+
 elif page == "Classroom Studies":
     st.title("📚 Classroom Studies")
     task = st.text_input("Enter your study topic for today:")
