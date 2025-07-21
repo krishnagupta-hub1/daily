@@ -90,6 +90,15 @@ if page == "Home":
     </div>
     """, unsafe_allow_html=True)
 
+    st.markdown("""
+    <div style='background-color:#d0ebff;padding:15px;border-radius:10px;margin-top:10px;'>
+        <h4>📘 DUOLINGO</h4>
+        <label>
+            <input type='checkbox' style='margin-right:10px;'>100 - 150 XP completed
+        </label>
+    </div>
+    """, unsafe_allow_html=True)
+
 elif page == "Afternoon Schedule":
     st.title("🕑 Afternoon Schedule")
     st.write("Add your afternoon tasks or routines here.")
@@ -108,9 +117,9 @@ elif page == "Afternoon Schedule":
         st.markdown("- Face upward rotate 180")
         st.markdown("- Stretching face both sides")
         st.subheader("2. Vid 1")
-        st.video(r"C:\\Users\\Krishna Gupta\\Documents\\file-tranfer-app\\Routine(exc+food+studies)\\Screenrecording_20250703_161502.mp4")
+        st.video("Screenrecording_20250703_161502.mp4")
         st.subheader("3. Vid 2")
-        st.video(r"C:\\Users\\Krishna Gupta\\Documents\\file-tranfer-app\\Routine(exc+food+studies)\\Screenrecording_20240221_130543.mp4")
+        st.video("Screenrecording_20240221_130543.mp4")
 
 elif page == "Classroom Studies":
     st.title("📚 Classroom Studies")
