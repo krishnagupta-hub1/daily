@@ -79,6 +79,17 @@ if page == "Home":
     for i in range(1, 7):
         st.markdown(f"<div style='background-color:#d0ebff;padding:15px;border-radius:10px;margin-top:10px;'>🔹 Section {i}</div>", unsafe_allow_html=True)
 
+    st.markdown("""
+    <hr style='margin-top:30px;margin-bottom:10px;border:1px solid #ccc;'>
+    <div style='font-size:16px;color:#888;'>
+        <strong>#At Night</strong><br>
+        Update dairy / Twitter / Git<br>
+        Check mails / LinkedIn / Organisation / Instagram<br>
+        (search / commitChanges)<br>
+        - &nbsp;&nbsp;&nbsp; - &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; - &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -
+    </div>
+    """, unsafe_allow_html=True)
+
 elif page == "Afternoon Schedule":
     st.title("🕑 Afternoon Schedule")
     st.write("Add your afternoon tasks or routines here.")
