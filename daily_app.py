@@ -4,6 +4,7 @@ import time
 import threading
 import json
 import os
+import calendar
 
 st.set_page_config(layout="wide", page_title="Daily Tracker")
 
@@ -12,14 +13,21 @@ def load_data():
     if os.path.exists("data.json"):
         with open("data.json", "r") as f:
             return json.load(f)
-    return {"classroom_tasks": [], "app_updates": [], "app_ideas": []}
+    # Add new duolingo_records to store checklist per date
+    return {
+        "classroom_tasks": [],
+        "app_updates": [],
+        "app_ideas": [],
+        "duolingo_records": {}  # {"2025-07-21": true, ...}
+    }
 
 def save_data():
     with open("data.json", "w") as f:
         json.dump({
             "classroom_tasks": st.session_state.classroom_tasks,
             "app_updates": st.session_state.app_updates,
-            "app_ideas": st.session_state.app_ideas
+            "app_ideas": st.session_state.app_ideas,
+            "duolingo_records": st.session_state.duolingo_records
         }, f)
 
 # --- Session Setup ---
@@ -28,18 +36,19 @@ data = load_data()
 if "page" not in st.session_state:
     st.session_state.page = "Home"
 if "classroom_tasks" not in st.session_state:
-    st.session_state.classroom_tasks = data["classroom_tasks"]
+    st.session_state.classroom_tasks = data.get("classroom_tasks", [])
 if "app_updates" not in st.session_state:
-    st.session_state.app_updates = data["app_updates"]
+    st.session_state.app_updates = data.get("app_updates", [])
 if "app_ideas" not in st.session_state:
-    st.session_state.app_ideas = data["app_ideas"]
+    st.session_state.app_ideas = data.get("app_ideas", [])
+if "duolingo_records" not in st.session_state:
+    st.session_state.duolingo_records = data.get("duolingo_records", {})
 
 # --- Sidebar Navigation ---
 st.sidebar.title("📘 Navigation")
 page = st.sidebar.radio("Go to", [
     "Home",
     "Afternoon Schedule",
-    # "Classroom Studies",  # Removed from navigation as per your instructions
     "DSA Sheet Scheduling",
     "Balanced Diet",
     "Mind & Body Routine",
@@ -138,7 +147,17 @@ elif page == "Afternoon Schedule":
         <h4>📘 DUOLINGO</h4>
     </div>
     """, unsafe_allow_html=True)
-    st.checkbox("100 - 150 XP completed", key="duolingo_afternoon")
+
+    # Track Duolingo checklist for today in calendar
+    today_str = datetime.date.today().isoformat()
+    duolingo_done = st.checkbox("100 - 150 XP completed", key=f"duolingo_afternoon_{today_str}")
+
+    # Save state if checked/unchecked
+    prev_val = st.session_state.duolingo_records.get(today_str, None)
+    # If it's newly changed, or not present, save
+    if duolingo_done != prev_val:
+        st.session_state.duolingo_records[today_str] = duolingo_done
+        save_data()
 
     st.markdown("""<hr style='margin-top:35px;margin-bottom:10px;border:1px solid #ccc;'>""", unsafe_allow_html=True)
     # --- New Classroom Studies Section ---
@@ -210,7 +229,50 @@ elif page == "Details and Portfolio":
 
 elif page == "Stored Data":
     st.title("🗃️ Stored Data")
-    st.write("Access all your saved entries and reminders here.")
+    st.markdown("#### Six divisions are shown below. First division: Your Duolingo Checklist Calendar")
+
+    # -- Division 1: Duolingo Checklist Calendar --
+    st.markdown("##### Division 1: <span style='color:#39FF14'>Duolingo Activity Calendar</span>", unsafe_allow_html=True)
+
+    # Calendar for current month
+    today = datetime.date.today()
+    year = today.year
+    month = today.month
+
+    duolingo_records = st.session_state.duolingo_records
+
+    month_cal = calendar.monthcalendar(year, month)
+    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+    # Prepare for colored icons: green tick, red cross
+    tick = "<span style='color:green;font-size:22px;'>&#10003;</span>"
+    cross = "<span style='color:red;font-size:22px;'>&#10007;</span>"
+
+    # Render the calendar table with tick/cross for each day
+    table_html = f"<table style='width:100%;text-align:center;font-size:16px;'><tr>"
+    for d in days:
+        table_html += f"<th style='padding:2px 8px 2px 8px;'>{d}</th>"
+    table_html += "</tr>"
+
+    for week in month_cal:
+        table_html += "<tr>"
+        for day in week:
+            if day == 0:
+                table_html += "<td></td>"
+            else:
+                day_str = datetime.date(year, month, day).isoformat()
+                mark = tick if duolingo_records.get(day_str, False) else cross
+                table_html += f"<td style='padding:7px'>{day}<br>{mark}</td>"
+        table_html += "</tr>"
+    table_html += "</table>"
+    st.markdown(table_html, unsafe_allow_html=True)
+    st.info("A green tick means Duolingo checklist was marked as completed for that day. A red cross means it was not done.")
+
+    # -- Division 2 to 6: Placeholders --
+    for idx in range(2, 7):
+        st.markdown(f"""<div style='background-color:#ffe6e6;padding:15px;border-radius:10px;margin-top:15px;margin-bottom:10px;'>
+            <strong>Division {idx}:</strong> <span style='color:#888;'>[Your custom data or tracker here]</span>
+        </div>""", unsafe_allow_html=True)
 
 elif page == "App Update":
     st.title("🔄 App Update")
@@ -238,3 +300,4 @@ elif page == "App Update":
             save_data()
         for i, idea in enumerate(st.session_state.app_ideas, 1):
             st.markdown(f"**{i}.** {idea}")
+
