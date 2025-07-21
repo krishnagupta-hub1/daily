@@ -39,7 +39,7 @@ st.sidebar.title("📘 Navigation")
 page = st.sidebar.radio("Go to", [
     "Home",
     "Afternoon Schedule",
-    "Classroom Studies",
+    # "Classroom Studies",  # Removed from navigation as per your instructions
     "DSA Sheet Scheduling",
     "Balanced Diet",
     "Mind & Body Routine",
@@ -140,17 +140,25 @@ elif page == "Afternoon Schedule":
     """, unsafe_allow_html=True)
     st.checkbox("100 - 150 XP completed", key="duolingo_afternoon")
 
-elif page == "Classroom Studies":
-    st.title("📚 Classroom Studies")
-    task = st.text_input("Enter your study topic for today:")
-    date = st.date_input("Select the date for this task")
+    st.markdown("""<hr style='margin-top:35px;margin-bottom:10px;border:1px solid #ccc;'>""", unsafe_allow_html=True)
+    # --- New Classroom Studies Section ---
+    st.markdown("""<div style='background-color:#d0ebff;padding:18px 15px 12px 15px;border-radius:10px;margin-top:10px;'>
+        <h4>📚 Classroom Studies</h4>
+        <div style='color:#333;font-size:15px;margin-bottom:8px;'>
+            Track your daily study topics and dates.
+        </div>
+    </div>""", unsafe_allow_html=True)
 
-    if st.button("Submit Study Task"):
-        if task:
-            st.session_state.classroom_tasks.append((task, str(date)))
-            save_data()
-        else:
-            st.warning("Please enter a task before submitting.")
+    with st.form(key="classroom_studies_form"):
+        task = st.text_input("Enter your study topic for today:")
+        date = st.date_input("Select the date for this task")
+        submitted = st.form_submit_button("Submit Study Task")
+        if submitted:
+            if task:
+                st.session_state.classroom_tasks.append((task, str(date)))
+                save_data()
+            else:
+                st.warning("Please enter a task before submitting.")
 
     for t, d in st.session_state.classroom_tasks:
         st.markdown(
