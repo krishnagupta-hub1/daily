@@ -58,8 +58,7 @@ with col1:
 with col2:
     timer_placeholder = st.empty()
 
-# Digital Clock
-
+# --- Digital Clock ---
 def update_clock():
     while True:
         now = datetime.datetime.now().strftime("%H:%M:%S")
@@ -79,8 +78,8 @@ if page == "Home":
     for i in range(1, 7):
         st.markdown(f"<div style='background-color:#d0ebff;padding:15px;border-radius:10px;margin-top:10px;'>🔹 Section {i}</div>", unsafe_allow_html=True)
 
+    st.markdown("""<hr style='margin-top:30px;margin-bottom:10px;border:1px solid #ccc;'>""", unsafe_allow_html=True)
     st.markdown("""
-    <hr style='margin-top:30px;margin-bottom:10px;border:1px solid #ccc;'>
     <div style='font-size:16px;color:#888;'>
         <strong>#At Night</strong><br>
         Update dairy / Twitter / Git<br>
@@ -91,7 +90,7 @@ if page == "Home":
     """, unsafe_allow_html=True)
 
     st.markdown("""
-    <div style='background-color:#d0ebff;padding:15px;border-radius:10px;margin-top:10px;'>
+    <div style='background-color:#e6ffe6;padding:15px;border-radius:10px;margin-top:10px;'>
         <h4>📘 DUOLINGO</h4>
         <label>
             <input type='checkbox' style='margin-right:10px;'>100 - 150 XP completed
@@ -103,27 +102,43 @@ elif page == "Afternoon Schedule":
     st.title("🕑 Afternoon Schedule")
     st.write("Add your afternoon tasks or routines here.")
 
-    with st.container():
-        st.markdown("### 🏃‍♂️ Morning 30 min Exercise")
-        st.markdown("- Pushups 30")
-        st.markdown("- Crunches 30")
-        st.markdown("- Side planks or Russian twist 30")
-        st.markdown("- Bhujangasana 30 sec")
+    # Morning Exercise - Light Grey
+    st.markdown("""
+    <div style='background-color:#f5f5f5;padding:20px;border-radius:10px;margin-top:25px;'>
+        <h4>🏃‍♂️ Morning 30 min Exercise</h4>
+        <ul>
+            <li>Pushups 30</li>
+            <li>Crunches 30</li>
+            <li>Side planks or Russian twist 30</li>
+            <li>Bhujangasana 30 sec</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
 
-    with st.container():
-        st.markdown("### 😁 Jawline Routine")
-        st.subheader("1. Warm Up")
-        st.markdown("- Upward stretch")
-        st.markdown("- Face upward rotate 180")
-        st.markdown("- Stretching face both sides")
-        st.subheader("2. Vid 1")
-        st.markdown("**[Video Placeholder for Vid 1]**")
-        st.subheader("3. Vid 2")
-        st.markdown("**[Video Placeholder for Vid 2]**")
+    # Jawline Routine - Light Red
+    st.markdown("""
+    <div style='background-color:#ffe6e6;padding:20px;border-radius:10px;margin-top:25px;'>
+        <h4>😁 Jawline Routine</h4>
+        <h5>1. Warm Up</h5>
+        <ul>
+            <li>Upward stretch</li>
+            <li>Face upward rotate 180</li>
+            <li>Stretching face both sides</li>
+        </ul>
+        <h5>2. Vid 1</h5>
+        <p>**[Video Placeholder for Vid 1]**</p>
+        <h5>3. Vid 2</h5>
+        <p>**[Video Placeholder for Vid 2]**</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    with st.container():
-        st.markdown("### 📘 DUOLINGO")
-        st.checkbox("100 - 150 XP completed", key="duolingo_afternoon")
+    # Duolingo - Light Green
+    st.markdown("""
+    <div style='background-color:#e6ffe6;padding:20px;border-radius:10px;margin-top:25px;'>
+        <h4>📘 DUOLINGO</h4>
+    </div>
+    """, unsafe_allow_html=True)
+    st.checkbox("100 - 150 XP completed", key="duolingo_afternoon")
 
 elif page == "Classroom Studies":
     st.title("📚 Classroom Studies")
