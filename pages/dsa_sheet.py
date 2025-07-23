@@ -1,38 +1,17 @@
 import streamlit as st
 import pandas as pd
 import datetime
+from core.data_handler import save_data
 
 def draw():
     st.title("🧠 DSA Sheet Scheduling")
 
-    # Define DSA schedule data
-    dsa_schedule = [
-        {"#":1, "Type":"DSA", "Topic":"Learn the Basics", "Days":7, "Date Range":"Jul 23 – Jul 29", "Notes":"–"},
-        {"#":2, "Type":"DSA", "Topic":"Sorting Techniques", "Days":2, "Date Range":"Jul 30 – Jul 31", "Notes":"–"},
-        {"#":3, "Type":"Break", "Topic":"— CAT-1 Break —", "Days":9, "Date Range":"Aug 17 – Aug 25", "Notes":"🟦 \"Topic cat-1\""},
-        {"#":4, "Type":"DSA", "Topic":"Arrays", "Days":9, "Date Range":"Aug 1 – Aug 16 (✂️ split) + Aug 26", "Notes":"Continued after CAT-1"},
-        {"#":5, "Type":"DSA", "Topic":"Binary Search", "Days":7, "Date Range":"Aug 27 – Sep 2", "Notes":"Shifted after CAT-1"},
-        {"#":6, "Type":"Break", "Topic":"–", "Days":1, "Date Range":"Sep 3", "Notes":"Planned break"},
-        {"#":7, "Type":"DSA", "Topic":"Strings", "Days":3, "Date Range":"Sep 4 – Sep 6", "Notes":"–"},
-        {"#":8, "Type":"DSA", "Topic":"LinkedList", "Days":7, "Date Range":"Sep 7 – Sep 13", "Notes":"–"},
-        {"#":9, "Type":"DSA", "Topic":"Recursion", "Days":6, "Date Range":"Sep 14 – Sep 19", "Notes":"–"},
-        {"#":10, "Type":"Break", "Topic":"— Gravitas Prep —", "Days":3, "Date Range":"Sep 26 – Sep 28", "Notes":"🟦 \"Topic Gravitas\""},
-        {"#":11, "Type":"DSA", "Topic":"Bit Manipulation", "Days":4, "Date Range":"Sep 20 – Sep 23", "Notes":"–"},
-        {"#":12, "Type":"DSA", "Topic":"Stack & Queues", "Days":7, "Date Range":"Sep 24 – Sep 25 + Sep 29 – Oct 1", "Notes":"✂️ split by Gravitas"},
-        {"#":13, "Type":"Break", "Topic":"— CAT-2 Break —", "Days":11, "Date Range":"Oct 2 – Oct 12", "Notes":"🟦 \"Topic cat 2\""},
-        {"#":14, "Type":"DSA", "Topic":"Sliding Window / Two Pointer", "Days":3, "Date Range":"Oct 13 – Oct 15", "Notes":"Shifted post CAT-2"},
-        {"#":15, "Type":"DSA", "Topic":"Heaps", "Days":4, "Date Range":"Oct 16 – Oct 19", "Notes":"–"},
-        {"#":16, "Type":"DSA", "Topic":"Greedy", "Days":4, "Date Range":"Oct 20 – Oct 23", "Notes":"–"},
-        {"#":17, "Type":"DSA", "Topic":"Binary Trees", "Days":9, "Date Range":"Oct 24 – Nov 1", "Notes":"–"},
-        {"#":18, "Type":"Break", "Topic":"–", "Days":1, "Date Range":"Nov 2", "Notes":"Planned break"},
-        {"#":19, "Type":"DSA", "Topic":"Binary Search Trees", "Days":4, "Date Range":"Nov 3 – Nov 6", "Notes":"–"},
-        {"#":20, "Type":"DSA", "Topic":"Graphs", "Days":12, "Date Range":"Nov 7 – Nov 18", "Notes":"–"},
-        {"#":21, "Type":"Break", "Topic":"–", "Days":1, "Date Range":"Nov 19", "Notes":"Planned break"},
-        {"#":22, "Type":"DSA", "Topic":"Dynamic Programming", "Days":13, "Date Range":"Nov 20 – Dec 2", "Notes":"–"},
-        {"#":23, "Type":"Break", "Topic":"–", "Days":1, "Date Range":"Dec 3", "Notes":"Planned break"},
-        {"#":24, "Type":"DSA", "Topic":"Tries", "Days":2, "Date Range":"Dec 4 – Dec 5", "Notes":"–"},
-        {"#":25, "Type":"DSA", "Topic":"Strings (Adv)", "Days":3, "Date Range":"Dec 6 – Dec 8", "Notes":"–"}
-    ]
+    fixed_keywords = ["CAT", "Gravitas"]
+    today = datetime.date.today()
+    
+    # Load sheet or initialize
+    if not st.session_state.dsa_sheet or not isinstance(st.session_state.dsa_sheet, list):
+        st.session_state.dsa_sheet = []
 
     def parse_start_date(date_range):
         first_part = date_range.split('+')[0].split('(')[0].strip()
@@ -41,34 +20,125 @@ def draw():
         try:
             dt = datetime.datetime.strptime(f"{start_str} 2025", "%b %d %Y")
         except:
-            dt = datetime.datetime.max  # fallback
+            dt = datetime.datetime.max
         return dt
 
-    dsa_schedule_sorted = sorted(dsa_schedule, key=lambda x: parse_start_date(x["Date Range"]))
+    def format_date_range(start, end):
+        return f"{start.strftime('%b %d')} – {end.strftime('%b %d')}"
 
-    df = pd.DataFrame(dsa_schedule_sorted)
+    def add_entry_to_schedule(entry_topic, days, start_date, end_date, label_type, note="-"):
+        new_entry = {
+            "#": len(st.session_state.dsa_sheet) + 1,
+            "Type": label_type,
+            "Topic": entry_topic,
+            "Days": days,
+            "Date Range": format_date_range(start_date, end_date),
+            "Notes": note
+        }
 
-    # Editable notes handling
-    edited_notes = []
-    for i, row in df.iterrows():
-        key = f"dsa_notes_edit_{row['#']}"
-        val = st.text_input(f"Notes for #{row['#']} {row['Topic']}", value=row["Notes"], key=key)
-        edited_notes.append(val)
+        # Step 1: Insert at right spot
+        new_list = []
+        inserted = False
+        for item in st.session_state.dsa_sheet:
+            # Determine if this item is fixed break
+            fixed = any(kw.lower() in item.get("Topic", "").lower() for kw in fixed_keywords)
+            if not inserted and parse_start_date(item.get("Date Range", "Dec 31")) >= datetime.datetime.combine(start_date, datetime.time()):
+                # Insert before this only if not during fixed block
+                new_list.append(new_entry)
+                inserted = True
+            new_list.append(item)
 
-    df["Notes"] = edited_notes
+        if not inserted:
+            new_list.append(new_entry)
 
-    def highlight_breaks(row):
-        bg_color = '#D0E7FF' if row['Type'] == 'Break' else ''
-        return ['background-color: {}'.format(bg_color)]*len(row)
+        # Step 2: Recalculate future dates, but DO NOT shift fixed blocks
+        recalculated = []
+        cursor = new_list[0:1]
+        cursor_date = start_date
+        for task in new_list:
+            is_fixed = any(kw.lower() in task["Topic"].lower() for kw in fixed_keywords)
+            if is_fixed:
+                recalculated.append(task)
+                cursor_date = parse_start_date(task["Date Range"]).date() + datetime.timedelta(days=task["Days"])
+                continue
+            days = task["Days"]
+            start = cursor_date
+            end = start + datetime.timedelta(days=days - 1)
+            task["Date Range"] = format_date_range(start, end)
+            cursor_date = end + datetime.timedelta(days=1)
+            recalculated.append(task)
 
-    st.markdown("### DSA Schedule with Notes (Editable)")
-    st.dataframe(df.style.apply(highlight_breaks, axis=1))
+        # Update session
+        for idx, task in enumerate(recalculated):
+            task["#"] = idx + 1
 
-    if st.button("Save Notes"):
-        for i, row in df.iterrows():
-            for item in st.session_state.dsa_sheet:
-                if ('#' in item and item['#'] == row['#']) or ('topic' in item and row['Topic'].startswith(item.get('topic',''))):
-                    item['notes'] = row['Notes']
-                    break
+        st.session_state.dsa_sheet = recalculated
         save_data()
-        st.success("Notes saved successfully!")
+
+    # ------------------ Data Table -------------------
+    df = pd.DataFrame(st.session_state.dsa_sheet)
+    if not df.empty:
+        def highlight_breaks(row):
+            bg_color = '#D0E7FF' if row['Type'] == 'Break' else ''
+            return ['background-color: {}'.format(bg_color)]*len(row)
+        st.markdown("### DSA Schedule with Notes (Editable)")
+        st.dataframe(df.style.apply(highlight_breaks, axis=1), use_container_width=True)
+    else:
+        st.info("No entries in your DSA sheet yet. Add one below.")
+
+    # ----------------- Save Notes ----------------------
+    if df.shape[0] > 0 and "Notes" in df.columns:
+        st.markdown(" ")
+        if st.button("Save Notes"):
+            for i, row in df.iterrows():
+                task = st.session_state.dsa_sheet[i]
+                if "Notes" in row:
+                    task["Notes"] = row["Notes"]
+            save_data()
+            st.success("Notes saved successfully!")
+
+    # ----------------- Green Bar ----------------------
+    st.markdown("<div style='background:#e6ffe6;padding:15px;margin-top:15px;border-radius:8px;'><h4>🟩 Add Study Topic</h4>", unsafe_allow_html=True)
+    green_topic = st.text_input("✅ Topic Completed", key="green_topic")
+    g_col1, g_col2 = st.columns(2)
+    green_from = g_col1.date_input("From Date", value=today, key="green_from")
+    green_to = g_col2.date_input("Till Date", value=today, key="green_to")
+    if st.button("GO - Green Bar"):
+        if green_topic and green_from <= green_to:
+            delta = (green_to - green_from).days + 1
+            add_entry_to_schedule(green_topic, delta, green_from, green_to, "DSA")
+            st.success("✅ Study topic added to schedule.")
+            st.experimental_rerun()
+        else:
+            st.warning("Please enter a valid topic and date range.")
+
+    # ----------------- Red Bar ----------------------
+    st.markdown("<div style='background:#ffd2d2;padding:15px;margin-top:10px;border-radius:8px;'><h4>🟥 Add Fun Break</h4>", unsafe_allow_html=True)
+    red_fun = st.text_input("🎉 Fun you did (Movie/Sport/Social)", key="red_fun")
+    r_col1, r_col2 = st.columns(2)
+    red_from = r_col1.date_input("From Date", value=today, key="red_from")
+    red_to = r_col2.date_input("Till Date", value=today, key="red_to")
+    if st.button("GO - Red Bar"):
+        if red_fun and red_from <= red_to:
+            delta = (red_to - red_from).days + 1
+            add_entry_to_schedule(red_fun, delta, red_from, red_to, "Break", note="🎉 Fun Activity")
+            st.success("🎉 Fun entry added to schedule.")
+            st.experimental_rerun()
+        else:
+            st.warning("Please enter valid fun activity and date range.")
+
+    # ----------------- Gray Bar ----------------------
+    st.markdown("<div style='background:#f0f0f0;padding:15px;margin-top:10px;border-radius:8px;'><h4>⬜ Add Wasted Reason</h4>", unsafe_allow_html=True)
+    gray_reason = st.text_input("🙁 Time Wasted Reason", key="gray_reason")
+    y_col1, y_col2 = st.columns(2)
+    gray_from = y_col1.date_input("From Date", value=today, key="gray_from")
+    gray_to = y_col2.date_input("Till Date", value=today, key="gray_to")
+    if st.button("GO - Gray Bar"):
+        if gray_reason and gray_from <= gray_to:
+            delta = (gray_to - gray_from).days + 1
+            add_entry_to_schedule(gray_reason, delta, gray_from, gray_to, "Break", note="🚫 Time Wasted")
+            st.success("🚫 Time-waste entry added to schedule.")
+            st.experimental_rerun()
+        else:
+            st.warning("Please enter valid reason and date range.")
+
