@@ -5,6 +5,7 @@ import time
 import json
 import os
 import calendar
+import pandas as pd
 
 ############### Date Utility ################
 def get_today_date():
@@ -471,52 +472,85 @@ elif page == "Stored Data":
 
 elif page == "DSA Sheet Scheduling":
     st.title("🧠 DSA Sheet Scheduling")
-    st.markdown("### DSA Progress Sheet")
-    dsa_topics = [
-        "Step 1 : Learn the basics 0 / 31",
-        "Step 2 : Learn Important Sorting Techniques 0 / 7",
-        "Step 3 : Solve Problems on Arrays [Easy → Medium → Hard] 0 / 40",
-        "Step 4 : Binary Search [1D, 2D Arrays, Search Space] 0 / 32",
-        "Step 5 : Strings [Basic and Medium] 0 / 15",
-        "Step 6 : Learn LinkedList [Single LL, Double LL, Medium, Hard Problems] 0 / 31",
-        "Step 7 : Recursion [PatternWise] 0 / 25",
-        "Step 8 : Bit Manipulation [Concepts & Problems] 0 / 18",
-        "Step 9 : Stack and Queues [Learning, Pre-In-Post-fix, Monotonic Stack, Implementation] 0 / 30",
-        "Step 10 : Sliding Window & Two Pointer Combined Problems 0 / 12",
-        "Step 11 : Heaps [Learning, Medium, Hard Problems] 0 / 17",
-        "Step 12 : Greedy Algorithms [Easy, Medium/Hard] 0 / 16",
-        "Step 13 : Binary Trees [Traversals, Medium and Hard Problems] 0 / 39",
-        "Step 14 : Binary Search Trees [Concept and Problems] 0 / 16",
-        "Step 15 : Graphs [Concepts & Problems] 0 / 54",
-        "Step 16 : Dynamic Programming [Patterns and Problems] 0 / 56",
-        "Step 17 : Tries 0 / 7",
-        "Step 18 : Strings 0 / 9"
+
+    # Define DSA schedule data
+    dsa_schedule = [
+        {"#":1, "Type":"DSA", "Topic":"Learn the Basics", "Days":7, "Date Range":"Jul 23 – Jul 29", "Notes":"–"},
+        {"#":2, "Type":"DSA", "Topic":"Sorting Techniques", "Days":2, "Date Range":"Jul 30 – Jul 31", "Notes":"–"},
+        {"#":3, "Type":"Break", "Topic":"— CAT-1 Break —", "Days":9, "Date Range":"Aug 17 – Aug 25", "Notes":"🟦 \"Topic cat-1\""},
+        {"#":4, "Type":"DSA", "Topic":"Arrays", "Days":9, "Date Range":"Aug 1 – Aug 16 (✂️ split) + Aug 26", "Notes":"Continued after CAT-1"},
+        {"#":5, "Type":"DSA", "Topic":"Binary Search", "Days":7, "Date Range":"Aug 27 – Sep 2", "Notes":"Shifted after CAT-1"},
+        {"#":6, "Type":"Break", "Topic":"–", "Days":1, "Date Range":"Sep 3", "Notes":"Planned break"},
+        {"#":7, "Type":"DSA", "Topic":"Strings", "Days":3, "Date Range":"Sep 4 – Sep 6", "Notes":"–"},
+        {"#":8, "Type":"DSA", "Topic":"LinkedList", "Days":7, "Date Range":"Sep 7 – Sep 13", "Notes":"–"},
+        {"#":9, "Type":"DSA", "Topic":"Recursion", "Days":6, "Date Range":"Sep 14 – Sep 19", "Notes":"–"},
+        {"#":10, "Type":"Break", "Topic":"— Gravitas Prep —", "Days":3, "Date Range":"Sep 26 – Sep 28", "Notes":"🟦 \"Topic Gravitas\""},
+        {"#":11, "Type":"DSA", "Topic":"Bit Manipulation", "Days":4, "Date Range":"Sep 20 – Sep 23", "Notes":"–"},
+        {"#":12, "Type":"DSA", "Topic":"Stack & Queues", "Days":7, "Date Range":"Sep 24 – Sep 25 + Sep 29 – Oct 1", "Notes":"✂️ split by Gravitas"},
+        {"#":13, "Type":"Break", "Topic":"— CAT-2 Break —", "Days":11, "Date Range":"Oct 2 – Oct 12", "Notes":"🟦 \"Topic cat 2\""},
+        {"#":14, "Type":"DSA", "Topic":"Sliding Window / Two Pointer", "Days":3, "Date Range":"Oct 13 – Oct 15", "Notes":"Shifted post CAT-2"},
+        {"#":15, "Type":"DSA", "Topic":"Heaps", "Days":4, "Date Range":"Oct 16 – Oct 19", "Notes":"–"},
+        {"#":16, "Type":"DSA", "Topic":"Greedy", "Days":4, "Date Range":"Oct 20 – Oct 23", "Notes":"–"},
+        {"#":17, "Type":"DSA", "Topic":"Binary Trees", "Days":9, "Date Range":"Oct 24 – Nov 1", "Notes":"–"},
+        {"#":18, "Type":"Break", "Topic":"–", "Days":1, "Date Range":"Nov 2", "Notes":"Planned break"},
+        {"#":19, "Type":"DSA", "Topic":"Binary Search Trees", "Days":4, "Date Range":"Nov 3 – Nov 6", "Notes":"–"},
+        {"#":20, "Type":"DSA", "Topic":"Graphs", "Days":12, "Date Range":"Nov 7 – Nov 18", "Notes":"–"},
+        {"#":21, "Type":"Break", "Topic":"–", "Days":1, "Date Range":"Nov 19", "Notes":"Planned break"},
+        {"#":22, "Type":"DSA", "Topic":"Dynamic Programming", "Days":13, "Date Range":"Nov 20 – Dec 2", "Notes":"–"},
+        {"#":23, "Type":"Break", "Topic":"–", "Days":1, "Date Range":"Dec 3", "Notes":"Planned break"},
+        {"#":24, "Type":"DSA", "Topic":"Tries", "Days":2, "Date Range":"Dec 4 – Dec 5", "Notes":"–"},
+        {"#":25, "Type":"DSA", "Topic":"Strings (Adv)", "Days":3, "Date Range":"Dec 6 – Dec 8", "Notes":"–"}
     ]
-    if "dsa_sheet" not in st.session_state or len(st.session_state.dsa_sheet) != 18:
-        st.session_state.dsa_sheet = [{} for _ in range(18)]
-    dsa_sheet_changed = False
-    with st.form(key="dsa_sheet_form"):
-        sheet_rows = []
-        for i, topic in enumerate(dsa_topics):
-            if not st.session_state.dsa_sheet[i]:
-                st.session_state.dsa_sheet[i] = {"topic": topic, "completed_date": "", "days_taken": "", "unable_days": ""}
-            col1, col2, col3, col4, col5 = st.columns([1,5,2,2,2])
-            col1.write(str(i+1))
-            col2.write(topic)
-            completed_date = col3.text_input("", value=st.session_state.dsa_sheet[i].get("completed_date", ""), key=f"dsa_compdate_{i}")
-            days_taken = col4.text_input("", value=st.session_state.dsa_sheet[i].get("days_taken", ""), key=f"dsa_days_{i}")
-            unable_days = col5.text_input("", value=st.session_state.dsa_sheet[i].get("unable_days", ""), key=f"dsa_unable_{i}")
-            if completed_date != st.session_state.dsa_sheet[i].get("completed_date") or \
-               days_taken != st.session_state.dsa_sheet[i].get("days_taken") or \
-               unable_days != st.session_state.dsa_sheet[i].get("unable_days"):
-                st.session_state.dsa_sheet[i]["completed_date"] = completed_date
-                st.session_state.dsa_sheet[i]["days_taken"] = days_taken
-                st.session_state.dsa_sheet[i]["unable_days"] = unable_days
-                dsa_sheet_changed = True
-        if st.form_submit_button("Save DSA Sheet"):
-            if dsa_sheet_changed:
-                save_data()
-            st.success("DSA Sheet saved successfully!")
+
+    # Parse the date range's start date to a sortable datetime for ordering
+    def parse_start_date(date_range):
+        # Extract first date part before any special chars or splits
+        first_part = date_range.split('+')[0].split('(')[0].strip()
+        # Dates are in format e.g. Jul 23 – Jul 29 or Sep 3 — or single date
+        # When only one date, parse directly
+        parts = first_part.split('–')
+        start_str = parts[0].strip()
+        try:
+            # Append year 2025 (assumed based on current date)
+            dt = datetime.datetime.strptime(f"{start_str} 2025", "%b %d %Y")
+        except:
+            dt = datetime.datetime.max  # fallback to max
+        return dt
+
+    # Sort by start date
+    dsa_schedule_sorted = sorted(dsa_schedule, key=lambda x: parse_start_date(x["Date Range"]))
+
+    # Create DataFrame for display & editing notes
+    df = pd.DataFrame(dsa_schedule_sorted)
+
+    # Editable Notes column only
+    edited_notes = []
+    for i, row in df.iterrows():
+        key = f"dsa_notes_edit_{row['#']}"
+        val = st.text_input(f"Notes for #{row['#']} {row['Topic']}", value=row["Notes"], key=key)
+        edited_notes.append(val)
+    df["Notes"] = edited_notes
+
+    # Create a styled table with blue background for breaks rows
+    def highlight_breaks(row):
+        bg_color = '#D0E7FF' if row['Type'] == 'Break' else ''
+        return ['background-color: {}'.format(bg_color)]*len(row)
+    st.markdown("### DSA Schedule with Notes (Editable)")
+    st.dataframe(df.style.apply(highlight_breaks, axis=1))
+
+    # Save Notes back to session state on button click
+    if st.button("Save Notes"):
+        # Update the underlying data structure with edited notes
+        for i, row in df.iterrows():
+            for item in st.session_state.dsa_sheet:
+                # Match by number and topic and update notes if found
+                if ('#' in item and item['#']==row['#']) or ('topic' in item and row['Topic'].startswith(item.get('topic',''))):
+                    item['notes'] = row['Notes']
+                    break
+        # Persist notes changes for next reload
+        save_data()
+        st.success("Notes saved successfully!")
+
 
 elif page == "Important Dates":
     st.title("📅 Important Dates")
