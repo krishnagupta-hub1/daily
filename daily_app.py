@@ -1,4 +1,10 @@
 import streamlit as st
+
+
+if st.button("Force Refresh / Reset App State"):
+    st.session_state.clear()
+    st.experimental_rerun()
+
 import threading
 import time
 import datetime
