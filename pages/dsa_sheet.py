@@ -6,7 +6,7 @@ st.set_page_config(layout="wide")
 st.title("🧠 DSA Sheet Scheduling")
 
 # -----------------------------------
-# DSA Data (Original)
+# Original DSA Schedule Data
 # -----------------------------------
 
 original_schedule = [
@@ -42,65 +42,54 @@ original_schedule = [
 # -----------------------------------
 
 def parse_start_date(date_range):
-    first_part = date_range.split('+')[0].split('(')[0].strip()
-    start_str = first_part.split('–')[0].strip()
     try:
-        return datetime.datetime.strptime(f"{start_str} 2025", "%b %d %Y")
+        part = date_range.split('+')[0].split('–')[0].split('(')[0].strip()
+        return datetime.datetime.strptime(part + " 2025", "%b %d %Y")
     except:
         return datetime.datetime.max
 
 def highlight_breaks(row):
     return ['background-color: #D0E7FF' if row['Type'] == 'Break' else '' for _ in row]
 
-def is_conflict(date, fixed_ranges):
-    return any(start <= date <= end for (start, end) in fixed_ranges)
-
-def get_fixed_date_ranges(schedule):
-    ranges = []
-    for item in schedule:
-        if item['Type'] == 'Break':
-            dr = item['Date Range']
-            start, end = [d.strip() for d in dr.replace('–', '-').split('-')]
-            try:
-                s_date = datetime.datetime.strptime(start + " 2025", "%b %d %Y")
-                e_date = datetime.datetime.strptime(end + " 2025", "%b %d %Y")
-                ranges.append((s_date, e_date))
-            except:
-                continue
-    return ranges
+def insert_custom_event(color: str):
+    st.markdown(f"#### ➕ {color.capitalize()} Bar Input")
+    with st.form(f"{color}_form"):
+        topic = st.text_input(f"{color.capitalize()} Topic", key=f"{color}_topic")
+        reason = st.text_input("Reason / Fun Description", key=f"{color}_reason")
+        col1, col2 = st.columns(2)
+        with col1:
+            from_date = st.date_input("From Date", key=f"{color}_from")
+        with col2:
+            till_date = st.date_input("Till Date", key=f"{color}_till")
+        submitted = st.form_submit_button("GO")
+        if submitted:
+            if from_date > till_date:
+                st.error("❌ From Date cannot be after Till Date.")
+            elif not topic:
+                st.error("❌ Topic cannot be empty.")
+            else:
+                st.success(f"{color.capitalize()} task added: {topic} ({from_date} – {till_date})")
+                # You can implement scheduling logic here.
 
 # -----------------------------------
 # DSA Table Display
 # -----------------------------------
 
 df = pd.DataFrame(original_schedule)
-df_sorted = df.sort_values(by="Date Range", key=lambda col: col.map(parse_start_date))
+df["Start"] = df["Date Range"].apply(parse_start_date)
+df_sorted = df.sort_values(by="Start").drop(columns=["Start"])
 st.markdown("### 📅 DSA Schedule with Notes (Editable)")
 st.dataframe(df_sorted.style.apply(highlight_breaks, axis=1), use_container_width=True)
 
 # -----------------------------------
-# Input Sections (Green, Red, Gray)
+# Add Green / Red / Gray Bars
 # -----------------------------------
 
-def insert_custom_event(color: str):
-    st.markdown(f"#### ➕ {color.capitalize()} Bar Input")
-    with st.form(f"{color}_form"):
-        topic = st.text_input(f"{color.capitalize()} Topic")
-        reason = st.text_input("Reason / Fun Description")
-        col1, col2 = st.columns(2)
-        with col1:
-            from_date = st.date_input("From Date", key=f"{color}_from")
-        with col2:
-            till_date = st.date_input("Till Date", key=f"{color}_to")
-        submitted = st.form_submit_button("GO")
-        if submitted and from_date and till_date and topic:
-            st.success(f"{color.capitalize()} task added: {topic} from {from_date} to {till_date}")
-            # Actual event insertion logic would go here
-
-# Three colored bars
+st.markdown("---")
 insert_custom_event("green")
 insert_custom_event("red")
 insert_custom_event("gray")
+
 
 
 
