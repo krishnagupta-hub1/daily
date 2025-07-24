@@ -425,7 +425,7 @@ if page == "DSA Sheet Scheduling":
                 st.success(f"New topic '{new_topic.strip()}' added and schedule updated with no overlaps.")
 
                 # Rerun to update UI instantly
-                st.experimental_rerun()
+               # st.experimental_rerun()
 
 # (Other page codes unchanged)
 # You can add the rest of your app code here (all previous pages remain the same)
