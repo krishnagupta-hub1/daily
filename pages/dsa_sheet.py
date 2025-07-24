@@ -9,7 +9,6 @@ def draw():
     FIXED_KEYWORDS = ["CAT", "Gravitas"]
     today = datetime.date.today()
 
-    # --- Initial default schedule rows ---
     INITIAL_SCHEDULE = [
         {"#": 1, "Type": "DSA", "Topic": "Learn the Basics", "Days": 7, "Date Range": "Jul 23 – Jul 29", "Notes": "–"},
         {"#": 2, "Type": "DSA", "Topic": "Sorting Techniques", "Days": 2, "Date Range": "Jul 30 – Jul 31", "Notes": "–"},
@@ -40,101 +39,106 @@ def draw():
 
     if "dsa_sheet" not in st.session_state or not st.session_state.dsa_sheet:
         st.session_state.dsa_sheet = INITIAL_SCHEDULE.copy()
-        save_data()  # 🔁 Save immediately so it's persistent
+        save_data()
 
     def format_date_range(start, end):
         return f"{start.strftime('%b %d')} – {end.strftime('%b %d')}"
 
     def parse_start_date(date_range):
-        first_part = date_range.split('+')[0].split('(')[0].strip()
-        parts = first_part.split('–')
-        start_str = parts[0].strip()
         try:
-            return datetime.datetime.strptime(f"{start_str} 2025", "%b %d %Y").date()
+            date_str = date_range.split('–')[0].strip()
+            return datetime.datetime.strptime(f"{date_str} 2025", "%b %d").date()
         except:
             return datetime.date(9999, 1, 1)
 
-    def shift_schedule(new_topic, start, end, type_, note=""):
-        new_days = (end - start).days + 1
-        new_entry = {
-            "Type": type_,
-            "Topic": new_topic,
-            "Days": new_days,
-            "Date Range": format_date_range(start, end),
-            "Notes": note
-        }
-
-        new_sched = []
+    def shift_schedule(topic, start, end, type_, note=""):
+        days = (end - start).days + 1
+        new_item = {"Type": type_, "Topic": topic, "Days": days, "Date Range": "", "Notes": note}
+        schedule = sorted(st.session_state.dsa_sheet, key=lambda x: parse_start_date(x["Date Range"]))
+        new_schedule = []
         inserted = False
 
-        sorted_sched = sorted(st.session_state.dsa_sheet, key=lambda x: parse_start_date(x["Date Range"]))
-        for item in sorted_sched:
-            is_fixed = any(k.lower() in item["Topic"].lower() for k in FIXED_KEYWORDS)
-            if not inserted and parse_start_date(item["Date Range"]) >= start:
-                new_sched.append(new_entry)
+        for entry in schedule:
+            if not inserted and parse_start_date(entry["Date Range"]) >= start and not any(k.lower() in entry["Topic"].lower() for k in FIXED_KEYWORDS):
+                new_schedule.append(new_item)
                 inserted = True
-            new_sched.append(item)
+            new_schedule.append(entry)
+
         if not inserted:
-            new_sched.append(new_entry)
+            new_schedule.append(new_item)
 
         recalculated = []
         cursor = start
-        for item in new_sched:
-            is_fixed = any(k.lower() in item["Topic"].lower() for k in FIXED_KEYWORDS)
-            if is_fixed:
+        for item in new_schedule:
+            if any(k.lower() in item["Topic"].lower() for k in FIXED_KEYWORDS):
                 recalculated.append(item)
                 cursor = parse_start_date(item["Date Range"]) + datetime.timedelta(days=item["Days"])
-                continue
-            item["Date Range"] = format_date_range(cursor, cursor + datetime.timedelta(days=item["Days"] - 1))
-            recalculated.append(item)
-            cursor += datetime.timedelta(days=item["Days"])
+            else:
+                item["Date Range"] = format_date_range(cursor, cursor + datetime.timedelta(days=item["Days"] - 1))
+                recalculated.append(item)
+                cursor += datetime.timedelta(days=item["Days"])
 
-        for i, item in enumerate(recalculated):
-            item["#"] = i + 1
+        for i, row in enumerate(recalculated):
+            row["#"] = i + 1
 
         st.session_state.dsa_sheet = recalculated
         save_data()
 
-    # --- TABLE DISPLAY ---
+    # 📋 Show table
     df = pd.DataFrame(st.session_state.dsa_sheet)
-    st.markdown("### 📋 DSA Schedule with Notes (Editable)")
-    st.dataframe(df.style.apply(lambda row: ['background-color: #D0E7FF' if row['Type'] == 'Break' else '' for _ in row], axis=1), use_container_width=True)
 
-    if st.button("💾 Save Notes"):
-        for i, row in df.iterrows():
-            st.session_state.dsa_sheet[i]["Notes"] = row["Notes"]
+    def highlight_breaks(row):
+        return ['background-color: #D0E7FF' if row.get("Type") == "Break" else "" for _ in row]
+
+    st.markdown("### 📋 DSA Schedule with Notes (Editable)")
+    st.dataframe(df.style.apply(highlight_breaks, axis=1), use_container_width=True)
+
+    # 💾 Save notes
+    if st.button("Save Notes"):
+        for i in range(len(df)):
+            st.session_state.dsa_sheet[i]["Notes"] = df.iloc[i]["Notes"]
         save_data()
         st.success("Notes saved!")
 
-    # --- GREEN BAR ---
-    st.markdown("<div style='background:#e9ffe9;padding:15px;margin-top:15px;border-radius:8px;'><h4>🟩 Add Study Topic</h4></div>", unsafe_allow_html=True)
-    topic = st.text_input("Topic", key="green_topic")
-    from_dt = st.date_input("From", key="green_from", value=today)
-    to_dt = st.date_input("Till", key="green_to", value=today)
-    if st.button("➕ Add Study", key="add_green"):
-        if topic and from_dt <= to_dt:
-            shift_schedule(topic, from_dt, to_dt, "DSA", note="✅ Manually Added")
+    # 🟩 Green Bar (Study)
+    st.markdown("### 🟩 Add Study Topic")
+    topic = st.text_input("Study Topic")
+    col1, col2 = st.columns(2)
+    from_date = col1.date_input("From Date", value=today, key="study_from")
+    to_date = col2.date_input("To Date", value=today, key="study_to")
+    if st.button("➕ Add Study"):
+        if topic and from_date <= to_date:
+            shift_schedule(topic, from_date, to_date, "DSA", note="✅ Manually Added")
             st.experimental_rerun()
+        else:
+            st.warning("Please enter a valid topic and date range.")
 
-    # --- RED BAR ---
-    st.markdown("<div style='background:#ffeaea;padding:15px;margin-top:15px;border-radius:8px;'><h4>🟥 Add Fun Activity</h4></div>", unsafe_allow_html=True)
-    fun = st.text_input("Fun You Did", key="red_topic")
-    from_dt2 = st.date_input("From", key="red_from", value=today)
-    to_dt2 = st.date_input("Till", key="red_to", value=today)
-    if st.button("➕ Add Fun", key="add_red"):
-        if fun and from_dt2 <= to_dt2:
-            shift_schedule(fun, from_dt2, to_dt2, "Break", note="🎉 Fun")
+    # 🟥 Red Bar (Fun)
+    st.markdown("### 🟥 Add Fun Activity")
+    fun = st.text_input("Fun Activity")
+    col3, col4 = st.columns(2)
+    from_fun = col3.date_input("From Date", value=today, key="fun_from")
+    to_fun = col4.date_input("To Date", value=today, key="fun_to")
+    if st.button("➕ Add Fun"):
+        if fun and from_fun <= to_fun:
+            shift_schedule(fun, from_fun, to_fun, "Break", note="🎉 Fun")
             st.experimental_rerun()
+        else:
+            st.warning("Enter valid fun activity and dates.")
 
-    # --- GRAY BAR ---
-    st.markdown("<div style='background:#f0f0f0;padding:15px;margin-top:15px;border-radius:8px;'><h4>⬜ Add Wasted Time</h4></div>", unsafe_allow_html=True)
-    waste = st.text_input("Time Wasted Reason", key="gray_reason")
-    from_dt3 = st.date_input("From", key="gray_from", value=today)
-    to_dt3 = st.date_input("Till", key="gray_to", value=today)
-    if st.button("➕ Add Waste", key="add_gray"):
-        if waste and from_dt3 <= to_dt3:
-            shift_schedule(waste, from_dt3, to_dt3, "Break", note="⚠️ Wasted Time")
+    # ⬜ Gray Bar (Wasted Time)
+    st.markdown("### ⬜ Add Wasted Time")
+    wasted = st.text_input("Reason for Wasted Time")
+    col5, col6 = st.columns(2)
+    from_waste = col5.date_input("From Date", value=today, key="waste_from")
+    to_waste = col6.date_input("To Date", value=today, key="waste_to")
+    if st.button("➕ Add Wasted"):
+        if wasted and from_waste <= to_waste:
+            shift_schedule(wasted, from_waste, to_waste, "Break", note="⚠️ Time Wasted")
             st.experimental_rerun()
+        else:
+            st.warning("Enter valid wasted time and range.")
+
 
 
 
