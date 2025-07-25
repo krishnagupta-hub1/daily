@@ -1,5 +1,3 @@
-#dsa.py 
-
 import streamlit as st
 import pandas as pd
 import datetime
@@ -11,9 +9,15 @@ def draw():
     FIXED_KEYWORDS = ["CAT", "Gravitas"]
     today = datetime.date.today()
 
-    # If not initialized
+    # ---- STATE FOR DELETE CONFIRMATION ----
     if "dsa_sheet" not in st.session_state or not isinstance(st.session_state.dsa_sheet, list):
         st.session_state.dsa_sheet = []
+
+    if "delete_latest_confirm" not in st.session_state:
+        st.session_state.delete_latest_confirm = False
+
+    if "delete_action_flag" not in st.session_state:
+        st.session_state.delete_action_flag = False
 
     # --- Helper to parse Date Range start ----
     def parse_start_date(date_range):
@@ -98,6 +102,33 @@ def draw():
     else:
         st.info("No DSA entries found yet. Add one using options below.")
 
+    # ---------- DELETE LATEST ENTRY BUTTON (with confirmation) ------------
+    if not df.empty:
+        if not st.session_state.delete_latest_confirm:
+            if st.button("🗑️ Delete Latest Entry"):
+                st.session_state.delete_latest_confirm = True
+        else:
+            st.warning("Are you sure you want to delete the latest entry? This cannot be undone.")
+            col1, col2 = st.columns(2)
+            yes_clicked = col1.button("✅ Yes, Delete")
+            cancel_clicked = col2.button("❌ Cancel")
+
+            if yes_clicked:
+                st.session_state.delete_action_flag = True
+                st.session_state.delete_latest_confirm = False
+            elif cancel_clicked:
+                st.session_state.delete_latest_confirm = False
+
+    if st.session_state.delete_action_flag:
+        if st.session_state.dsa_sheet:
+            st.session_state.dsa_sheet.pop()  # Remove last entry
+            save_data()
+            st.success("Latest entry deleted!")
+        else:
+            st.warning("No entries to delete.")
+        st.session_state.delete_action_flag = False
+        st.experimental_rerun()
+
     # ------------------ SAVE NOTES -------------------
     if df.shape[0] > 0:
         if st.button("💾 Save Notes"):
@@ -152,5 +183,7 @@ def draw():
             st.experimental_rerun()
         else:
             st.warning("Please enter a reason and date range.")
+
+
 
 
