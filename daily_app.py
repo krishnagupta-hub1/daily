@@ -86,7 +86,7 @@ PAGES = {
     "Important Dates": important_dates.draw,
     "Passwords": passwords.draw,
     "Details and Portfolio": details_portfolio.draw,
-    "App Update": app_update.draw
+    "App Update": app_update.draw,
     "Top Reminders": top_reminders.draw 
 }
 
