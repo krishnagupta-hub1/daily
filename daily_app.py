@@ -21,7 +21,8 @@ from pages import (
     important_dates,
     passwords,
     details_portfolio,
-    app_update
+    app_update,
+    top_reminders
 )
 
 # -------------------------
@@ -86,6 +87,7 @@ PAGES = {
     "Passwords": passwords.draw,
     "Details and Portfolio": details_portfolio.draw,
     "App Update": app_update.draw
+    "Top Reminders": top_reminders.draw 
 }
 
 page = st.sidebar.radio("Go to", list(PAGES.keys()))
