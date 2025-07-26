@@ -1,4 +1,3 @@
-#perplexity single file (half correct)
 import streamlit as st
 import pandas as pd
 import datetime
@@ -6,8 +5,6 @@ import uuid
 import copy
 
 st.set_page_config(page_title="DSA Daily Scheduler", layout="wide")
-
-####### ---------- HELPER FUNCTIONS ------------- #######
 
 def date_fmt(dt):
     if isinstance(dt, pd.Timestamp):
@@ -47,7 +44,45 @@ def prev_day(d):
         d = d.date()
     return d - datetime.timedelta(days=1)
 
-###### --------- DATA AND INITIALIZATION ---------- ######
+def days_between(start, end):
+    if isinstance(start, pd.Timestamp):
+        start = start.date()
+    if isinstance(end, pd.Timestamp):
+        end = end.date()
+    return (end - start).days + 1
+
+def split_topic_by_breaks(topic_interval, breaks_sorted):
+    topic_start, topic_end = topic_interval
+    blocking_intervals = []
+    for b_start, b_end in breaks_sorted:
+        if not (b_end < topic_start or b_start > topic_end):
+            blocking_intervals.append((
+                max(topic_start, b_start),
+                min(topic_end, b_end)
+            ))
+    if not blocking_intervals:
+        return [(topic_start, topic_end)]
+
+    blocking_intervals.sort()
+    merged_blocks = []
+    current_s, current_e = blocking_intervals[0]
+    for s, e in blocking_intervals[1:]:
+        if s <= current_e + datetime.timedelta(days=1):
+            current_e = max(current_e, e)
+        else:
+            merged_blocks.append((current_s, current_e))
+            current_s, current_e = s, e
+    merged_blocks.append((current_s, current_e))
+
+    result_segments = []
+    current_pos = topic_start
+    for b_s, b_e in merged_blocks:
+        if current_pos < b_s:
+            result_segments.append((current_pos, b_s - datetime.timedelta(days=1)))
+        current_pos = b_e + datetime.timedelta(days=1)
+    if current_pos <= topic_end:
+        result_segments.append((current_pos, topic_end))
+    return result_segments
 
 DEFAULT_DATA = [
     {"Type": "DSA", "Topic": "LinkedList", "Days": 9, "Date Range": "27/07/25 – 04/08/25", "Notes": "", "UID": get_uid()},
@@ -78,10 +113,7 @@ if "dsa_sheet" not in st.session_state:
     st.session_state.dsa_sheet = copy.deepcopy(DEFAULT_DATA)
 
 def _save_data():
-    # Placeholder for persistence logic if needed
     pass
-
-###### ---------- ADVANCED RESCHEDULING CORE ---------- ######
 
 def expand_all_ranges(rows):
     out = []
@@ -99,206 +131,132 @@ def expand_all_ranges(rows):
                 out.append((row, start, end))
     return out
 
-def merge_consecutive_same_topic(events):
-    """Merge consecutive events with the same Topic and Type into single continuous date-range entries."""
-    if not events:
-        return []
-    merged = []
-    prev = events[0].copy()
-
-    for curr in events[1:]:
-        prev_end = parse_date(prev['Date Range'].split('–')[-1].strip())
-        curr_start = parse_date(curr['Date Range'].split('–')[0].strip())
-        same_topic = (curr['Topic'] == prev['Topic'] and curr['Type'] == prev['Type'])
-
-        if same_topic and curr_start == next_day(prev_end):
-            prev['Days'] += curr['Days']
-            start_date = parse_date(prev['Date Range'].split('–')[0].strip())
-            new_end_date = curr_start + datetime.timedelta(days=curr['Days'] - 1)
-            prev['Date Range'] = daterange_fmt(start_date, new_end_date)
-        else:
-            merged.append(prev)
-            prev = curr.copy()
-
-    merged.append(prev)
-    return merged
-
-def reschedule_dsa_with_interruptions(entries, new_topic=None, delete_uid=None):
+def reschedule_dsa(entries, new_topic=None, delete_uid=None):
     events = copy.deepcopy(entries)
+
     if delete_uid:
         events = [e for e in events if e['UID'] != delete_uid]
 
     breaks = [e for e in events if e["Type"] == "Break"]
     dsa = [e for e in events if e["Type"] == "DSA"]
 
-    all_dates = []
-    for r, s, e in expand_all_ranges(events):
-        all_dates.append(s)
-    base_date = min(all_dates) if all_dates else datetime.date.today()
-
-    locked = []
+    break_intervals = []
     for b in breaks:
         for _, s, e in expand_all_ranges([b]):
-            locked.append((s, e, b))
+            break_intervals.append((s, e))
+    break_intervals.sort()
 
-    interruptions = []
+    new_topic_intervals = []
     if new_topic:
-        interruptions.append((
-            new_topic['start'], new_topic['end'], {
+        new_start = new_topic['start']
+        new_end = new_topic['end']
+        new_topic_intervals.append((
+            new_start, new_end, {
                 "Type": "DSA",
                 "Topic": new_topic['topic'],
-                "Days": (new_topic['end'] - new_topic['start']).days + 1,
-                "Date Range": daterange_fmt(new_topic['start'], new_topic['end']),
-                "Notes": new_topic.get('note', ""),
-                "UID": get_uid(),
+                "Notes": new_topic.get("note", ""),
+                "UID": get_uid()
             }
         ))
 
-    all_dsa_segments = []
-    for d in dsa:
-        for _, start, end in expand_all_ranges([d]):
-            length = (end - start).days + 1
-            all_dsa_segments.extend([{
-                "Topic": d["Topic"],
-                "UID": d["UID"],
-                "Notes": d.get("Notes", ""),
-            }] * length)
+    topic_splits_count = {}
 
-    protected_days_map = {}
-    for s, e, ev in locked + interruptions:
-        d = s
-        while d <= e:
-            protected_days_map[d] = ev
-            d = next_day(d)
+    def earliest_start(r):
+        drs = r["Date Range"].split(",")
+        starts = [parse_date(d.split("–")[0].strip()) for d in drs]
+        return min(starts)
 
-    output = []
-    current_date = base_date
-    dsa_pointer = 0
-    dsa_topic_counts = {}
+    dsa_sorted = sorted(dsa, key=earliest_start)
 
-    while dsa_pointer < len(all_dsa_segments) or current_date in protected_days_map:
-        if current_date in protected_days_map:
-            ev = protected_days_map[current_date]
-            if output and output[-1]['UID'] == ev['UID']:
-                output[-1]['Days'] += 1
-                start_str = output[-1]['Date Range'].split('–')[0].strip()
-                start_dt = parse_date(start_str)
-                output[-1]['Date Range'] = daterange_fmt(start_dt, current_date)
-            else:
-                new_event = copy.deepcopy(ev)
-                new_event['Days'] = 1
-                new_event['Date Range'] = daterange_fmt(current_date, current_date)
-                if 'Type' not in new_event:
-                    new_event['Type'] = "Break"
-                if 'UID' not in new_event:
-                    new_event['UID'] = get_uid()
-                output.append(new_event)
-            current_date = next_day(current_date)
-            continue
+    scheduled = []
 
-        if dsa_pointer >= len(all_dsa_segments):
-            break
-
-        seg = all_dsa_segments[dsa_pointer]
-        topic_name = seg["Topic"]
-        dsa_topic_counts[topic_name] = dsa_topic_counts.get(topic_name, 0) + 1
-        part_num = dsa_topic_counts[topic_name]
-        if part_num == 1:
-            display_topic = topic_name
+    for topic in dsa_sorted:
+        if new_topic and topic["Topic"] == new_topic['topic']:
+            segs = [(new_topic['start'], new_topic['end'])]
         else:
-            display_topic = f"{topic_name} (continued {part_num})"
+            segs_orig = []
+            for _, s, e in expand_all_ranges([topic]):
+                segs_orig.append((s, e))
+            segs = []
+            for seg in segs_orig:
+                segments = split_topic_by_breaks(seg, break_intervals)
+                segs.extend(segments)
 
-        if output and output[-1]['Type'] == "DSA" and output[-1]["Topic"] == display_topic:
-            output[-1]['Days'] += 1
-            start_str = output[-1]['Date Range'].split('–')[0].strip()
-            start_dt = parse_date(start_str)
-            output[-1]['Date Range'] = daterange_fmt(start_dt, current_date)
-        else:
-            output.append({
+        for idx_seg, (seg_start, seg_end) in enumerate(segs):
+            key = topic['Topic']
+            topic_splits_count[key] = topic_splits_count.get(key, 0) + 1
+            split_num = topic_splits_count[key]
+
+            display_topic = f"{topic['Topic']} (part {split_num})" if len(segs) > 1 else topic['Topic']
+            days = days_between(seg_start, seg_end)
+            uid = get_uid()
+
+            scheduled.append({
                 "S No.": 0,
                 "Type": "DSA",
                 "Topic": display_topic,
-                "Days": 1,
-                "Date Range": daterange_fmt(current_date, current_date),
-                "Notes": seg.get("Notes", ""),
-                "UID": get_uid()
+                "Days": days,
+                "Date Range": daterange_fmt(seg_start, seg_end),
+                "Notes": topic.get("Notes", ""),
+                "UID": uid
             })
-        dsa_pointer += 1
-        current_date = next_day(current_date)
 
-    if output:
-        last_date_str = output[-1]['Date Range'].split('–')[-1].strip()
-        last_date = parse_date(last_date_str)
-    else:
-        last_date = base_date
+    for b in breaks:
+        drs = b["Date Range"].split(",")
+        for dr in drs:
+            dr = dr.strip()
+            if "–" in dr:
+                start = parse_date(dr.split("–")[0].strip())
+                end = parse_date(dr.split("–")[1].strip())
+            else:
+                start = end = parse_date(dr)
+            days = days_between(start, end)
+            scheduled.append({
+                "S No.": 0,
+                "Type": "Break",
+                "Topic": b["Topic"],
+                "Days": days,
+                "Date Range": daterange_fmt(start, end),
+                "Notes": b.get("Notes", ""),
+                "UID": b.get("UID", get_uid())
+            })
 
-    extra_locked_days = []
-    for s, e, ev in locked + interruptions:
-        d = s
-        while d <= e:
-            if d > last_date and d not in protected_days_map:
-                extra_locked_days.append((d, ev))
-            d = next_day(d)
+    def start_date(ev):
+        return parse_date(ev["Date Range"].split("–")[0].strip())
 
-    extra_locked_days.sort(key=lambda x: x[0])
-    for d, ev in extra_locked_days:
-        if output and output[-1].get("UID") == ev.get("UID"):
-            output[-1]['Days'] += 1
-            start_dt = parse_date(output[-1]['Date Range'].split('–')[0].strip())
-            output[-1]['Date Range'] = daterange_fmt(start_dt, d)
-        else:
-            new_ev = copy.deepcopy(ev)
-            new_ev['Days'] = 1
-            new_ev['Date Range'] = daterange_fmt(d, d)
-            if 'Type' not in new_ev:
-                new_ev['Type'] = "Break"
-            if 'UID' not in new_ev:
-                new_ev['UID'] = get_uid()
-            output.append(new_ev)
+    scheduled.sort(key=start_date)
 
-    output.sort(key=lambda x: parse_date(x["Date Range"].split("–")[0].strip()))
-
-    # Merge consecutive rows with same Topic & Type into consolidated date ranges
-    output = merge_consecutive_same_topic(output)
-
-    for idx, ev in enumerate(output, 1):
+    for idx, ev in enumerate(scheduled, 1):
         ev["S No."] = idx
 
-    return output
-
-###### ----------- MAIN APP UI & LOGIC ----------- #######
+    return scheduled
 
 def main():
     st.title("📅 DSA Sheet Scheduler (Daily App)")
+    st.info("Add study topics, breaks, or fun/wasted events below! Schedule splits topics only at breaks. Breaks stay fixed. Delete or add rows as needed.")
 
-    st.info("Add study topics, breaks, or fun/wasted events below! Your DSA schedule will split/reschedule automatically to avoid date overlaps. Breaks stay fixed. You can delete any row. 'Save Notes' will store notes for each row.")
-
-    # Reschedule and assign S No.
-    st.session_state.dsa_sheet = reschedule_dsa_with_interruptions(st.session_state.dsa_sheet)
+    st.session_state.dsa_sheet = reschedule_dsa(st.session_state.dsa_sheet)
     df = pd.DataFrame(st.session_state.dsa_sheet)
 
     if not df.empty:
         st.subheader("DSA Schedule Table")
-
         show_df = df.drop(columns=["UID"])
         st.dataframe(show_df, use_container_width=True)
 
         st.markdown("### Delete any row:")
         for i, row in df.iterrows():
             col1, col2 = st.columns([8, 2])
-            s_no = row['S No.'] if 'S No.' in row else i + 1
+            s_no = row.get('S No.', i + 1)
             col1.markdown(f"**{s_no}. {row['Type']} — {row['Topic']}** ({row['Date Range']})")
-            delete_clicked = col2.button(f"🗑️ Delete", key=f"del_{row['UID']}")
+            delete_clicked = col2.button(f"🗑️ Delete", key=f"del_{row['UID']}_{i}")
             if delete_clicked:
-                st.session_state.dsa_sheet = reschedule_dsa_with_interruptions(
-                    st.session_state.dsa_sheet,
-                    new_topic=None,
-                    delete_uid=row['UID']
-                )
+                st.session_state.dsa_sheet = reschedule_dsa(st.session_state.dsa_sheet, delete_uid=row['UID'])
                 _save_data()
                 st.rerun()
+                return
+
     else:
-        st.info("No DSA entries yet.")
+        st.info("No schedule entries found yet.")
 
     today = datetime.date.today()
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -334,18 +292,18 @@ def main():
         elif study_from > study_to:
             st.error("From date cannot be after Till date.")
         else:
-            st.session_state.dsa_sheet = reschedule_dsa_with_interruptions(
-                st.session_state.dsa_sheet,
-                new_topic=dict(
-                    topic=study_topic.strip(),
-                    start=study_from,
-                    end=study_to,
-                    note=study_note.strip()
-                )
-            )
+            new_entry = {
+                'topic': study_topic.strip(),
+                'start': study_from,
+                'end': study_to,
+                'note': study_note.strip(),
+                'type': 'DSA'
+            }
+            st.session_state.dsa_sheet = reschedule_dsa(st.session_state.dsa_sheet, new_topic=new_entry)
             _save_data()
             st.success("Added Study topic and rescheduled!")
             st.rerun()
+            return
 
     if go2:
         if not fun_topic.strip():
@@ -362,10 +320,11 @@ def main():
                 "UID": get_uid()
             }
             st.session_state.dsa_sheet.append(new_break)
-            st.session_state.dsa_sheet = reschedule_dsa_with_interruptions(st.session_state.dsa_sheet)
+            st.session_state.dsa_sheet = reschedule_dsa(st.session_state.dsa_sheet)
             _save_data()
             st.success("Added new Break/Fun activity!")
             st.rerun()
+            return
 
     if go3:
         if not waste_reason.strip():
@@ -382,13 +341,14 @@ def main():
                 "UID": get_uid()
             }
             st.session_state.dsa_sheet.append(new_break)
-            st.session_state.dsa_sheet = reschedule_dsa_with_interruptions(st.session_state.dsa_sheet)
+            st.session_state.dsa_sheet = reschedule_dsa(st.session_state.dsa_sheet)
             _save_data()
             st.success("Logged wasted time as Break!")
             st.rerun()
+            return
 
     st.markdown("---")
     st.markdown("Made with ❤️ for efficient DSA prep! [Perplexity AI App Example]")
 
-# ---- Streamlit best-practice: just call main() at global scope ---
+# Just call main() at the root, for Streamlit!
 main()
