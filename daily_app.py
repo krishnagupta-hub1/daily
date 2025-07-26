@@ -113,7 +113,7 @@ if "dsa_sheet" not in st.session_state:
     st.session_state.dsa_sheet = copy.deepcopy(DEFAULT_DATA)
 
 def _save_data():
-    # Persistence placeholder
+    # Persistence placeholder (extend as needed)
     pass
 
 def expand_all_ranges(rows):
@@ -133,10 +133,6 @@ def expand_all_ranges(rows):
     return out
 
 def reschedule_dsa(entries, new_topic=None, delete_uid=None):
-    """
-    Reschedules DSA topics with splitting only at Break boundaries.
-    Keeps Breaks locked.
-    """
     events = copy.deepcopy(entries)
     if delete_uid:
         events = [e for e in events if e['UID'] != delete_uid]
@@ -144,14 +140,12 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
     breaks = [e for e in events if e["Type"] == "Break"]
     dsa = [e for e in events if e["Type"] == "DSA"]
 
-    # Parse all breaks into intervals, sorted
     break_intervals = []
     for b in breaks:
         for _, s, e in expand_all_ranges([b]):
             break_intervals.append((s,e))
     break_intervals.sort()
 
-    # If new topic added, insert it as locked break-equivalent (fixed)
     new_topic_intervals = []
     if new_topic:
         new_start = new_topic['start']
@@ -165,7 +159,6 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
             }
         ))
 
-    # Build combined locked intervals: breaks + new topic locked
     locked_intervals = [*[(s,e,b) for b,s,e in [(b,) + bi for bi in break_intervals]]]
     for ni in new_topic_intervals:
         locked_intervals.append(ni)
@@ -173,7 +166,6 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
 
     topic_splits_count = {}
 
-    # Sort DSA topics by earliest start
     def earliest_start(r):
         drs = r["Date Range"].split(",")
         starts = [parse_date(d.split("–")[0].strip()) for d in drs]
@@ -184,7 +176,6 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
     scheduled = []
 
     for topic in dsa_sorted:
-        # If topic equals new topic, use new topic dates for scheduling
         if new_topic and topic["Topic"] == new_topic['topic']:
             segs = [(new_topic['start'], new_topic['end'])]
         else:
@@ -203,6 +194,8 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
 
             display_topic = (f"{topic['Topic']} (part {split_num})" if len(segs) > 1 else topic['Topic'])
             days = days_between(seg_start, seg_end)
+            # Create fresh UID
+            uid = get_uid()
 
             scheduled.append({
                 "S No.": 0,
@@ -211,10 +204,9 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
                 "Days": days,
                 "Date Range": daterange_fmt(seg_start, seg_end),
                 "Notes": topic.get("Notes", ""),
-                "UID": get_uid()
+                "UID": uid
             })
 
-    # Add breaks as fixed rows
     for b in breaks:
         drs = b["Date Range"].split(",")
         for dr in drs:
@@ -235,13 +227,11 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
                 "UID": b.get("UID", get_uid())
             })
 
-    # Sort all scheduled by start date
     def start_date(ev):
         return parse_date(ev["Date Range"].split("–")[0].strip())
 
     scheduled.sort(key=start_date)
 
-    # Push overlapping DSA topics after new topic date if needed
     if new_topic:
         new_s = new_topic['start']
         new_e = new_topic['end']
@@ -255,7 +245,6 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
                     days = ev["Days"]
                     ev["Date Range"] = daterange_fmt(new_start, new_start + datetime.timedelta(days=days-1))
 
-    # Re-number S No.
     for idx, ev in enumerate(scheduled, 1):
         ev["S No."] = idx
 
@@ -265,7 +254,6 @@ def main():
     st.title("📅 DSA Sheet Scheduler (Daily App)")
     st.info("Add study topics, breaks, or fun/wasted events below! Schedule splits topics only at breaks. Breaks stay fixed. Delete or add rows as needed.")
 
-    # Reschedule fresh
     st.session_state.dsa_sheet = reschedule_dsa(st.session_state.dsa_sheet)
     df = pd.DataFrame(st.session_state.dsa_sheet)
 
@@ -279,12 +267,13 @@ def main():
             col1, col2 = st.columns([8, 2])
             s_no = row['S No.'] if 'S No.' in row else i + 1
             col1.markdown(f"**{s_no}. {row['Type']} — {row['Topic']}** ({row['Date Range']})")
-            # Use index i and UID together in key for uniqueness
             delete_clicked = col2.button(f"🗑️ Delete", key=f"del_{row['UID']}_{i}")
             if delete_clicked:
                 st.session_state.dsa_sheet = reschedule_dsa(st.session_state.dsa_sheet, delete_uid=row['UID'])
                 _save_data()
                 st.experimental_rerun()
+                return
+
     else:
         st.info("No schedule entries found yet.")
 
@@ -333,6 +322,7 @@ def main():
             _save_data()
             st.success("Added Study topic and rescheduled!")
             st.experimental_rerun()
+            return
 
     if go2:
         if not fun_topic.strip():
@@ -353,6 +343,7 @@ def main():
             _save_data()
             st.success("Added new Break/Fun activity!")
             st.experimental_rerun()
+            return
 
     if go3:
         if not waste_reason.strip():
@@ -373,6 +364,7 @@ def main():
             _save_data()
             st.success("Logged wasted time as Break!")
             st.experimental_rerun()
+            return
 
     st.markdown("---")
     st.markdown("Made with ❤️ for efficient DSA prep! [Perplexity AI App Example]")
