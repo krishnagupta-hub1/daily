@@ -49,7 +49,6 @@ def prev_day(d):
 ###### --------- DATA AND INITIALIZATION ---------- ######
 
 DEFAULT_DATA = [
-    # Your initial schedule entries
     {"Type": "DSA", "Topic": "LinkedList", "Days": 9, "Date Range": "27/07/25 – 04/08/25", "Notes": "", "UID": get_uid()},
     {"Type": "DSA", "Topic": "Recursion", "Days": 6, "Date Range": "05/08/25 – 10/08/25", "Notes": "", "UID": get_uid()},
     {"Type": "DSA", "Topic": "Bit Manipulation (Part 1)", "Days": 3, "Date Range": "11/08/25 – 13/08/25", "Notes": "", "UID": get_uid()},
@@ -78,7 +77,7 @@ if "dsa_sheet" not in st.session_state:
     st.session_state.dsa_sheet = copy.deepcopy(DEFAULT_DATA)
 
 def _save_data():
-    # Placeholder for persistence logic
+    # Placeholder for persistence logic if needed
     pass
 
 ###### ---------- ADVANCED RESCHEDULING CORE ---------- ######
@@ -98,6 +97,35 @@ def expand_all_ranges(rows):
             if start is not None and end is not None:
                 out.append((row, start, end))
     return out
+
+def merge_consecutive_same_topic(events):
+    """Merge consecutive events with the same Topic and Type into single continuous date-range entries."""
+    if not events:
+        return []
+    merged = []
+    prev = events[0].copy()
+
+    for curr in events[1:]:
+        prev_end = parse_date(prev['Date Range'].split('–')[-1].strip())
+        curr_start = parse_date(curr['Date Range'].split('–')[0].strip())
+        same_topic = (curr['Topic'] == prev['Topic'] and curr['Type'] == prev['Type'])
+
+        # Check if current event starts the day after the previous event ends
+        if same_topic and curr_start == next_day(prev_end):
+            # Merge by extending previous event
+            prev['Days'] += curr['Days']
+            start_date = parse_date(prev['Date Range'].split('–')[0].strip())
+            # Update date range to cover merged span
+            new_end_date = curr_start + datetime.timedelta(days=curr['Days'] - 1)
+            prev['Date Range'] = daterange_fmt(start_date, new_end_date)
+            # Optionally concatenate notes if needed (keep previous notes)
+            # prev['Notes'] = prev['Notes']  # or customize how to merge notes
+        else:
+            merged.append(prev)
+            prev = curr.copy()
+
+    merged.append(prev)
+    return merged
 
 def reschedule_dsa_with_interruptions(entries, new_topic=None, delete_uid=None):
     events = copy.deepcopy(entries)
@@ -232,8 +260,13 @@ def reschedule_dsa_with_interruptions(entries, new_topic=None, delete_uid=None):
                 new_ev['UID'] = get_uid()
             output.append(new_ev)
 
+    # Sort by date
     output.sort(key=lambda x: parse_date(x["Date Range"].split("–")[0].strip()))
 
+    # Now merge consecutive rows with the same topic and type into single continuous entries
+    output = merge_consecutive_same_topic(output)
+
+    # Re-number S No.
     for idx, ev in enumerate(output, 1):
         ev["S No."] = idx
 
@@ -246,18 +279,16 @@ def main():
 
     st.info("Add study topics, breaks, or fun/wasted events below! Your DSA schedule will split/reschedule automatically to avoid date overlaps. Breaks stay fixed. You can delete any row. 'Save Notes' will store notes for each row.")
 
-    # **Ensure schedule is always freshly rescheduled and S No. assigned**
+    # Always reschedule fresh to ensure consistent state & S No.
     st.session_state.dsa_sheet = reschedule_dsa_with_interruptions(st.session_state.dsa_sheet)
     df = pd.DataFrame(st.session_state.dsa_sheet)
 
     if not df.empty:
         st.subheader("DSA Schedule Table")
 
-        # Display schedule table without UID column
         show_df = df.drop(columns=["UID"])
         st.dataframe(show_df, use_container_width=True)
 
-        # Delete row buttons per entry
         st.markdown("### Delete any row:")
         for i, row in df.iterrows():
             col1, col2 = st.columns([8, 2])
@@ -274,7 +305,6 @@ def main():
     else:
         st.info("No DSA entries yet.")
 
-    # ------ Add Entry Forms ------
     today = datetime.date.today()
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("Add Entries")
