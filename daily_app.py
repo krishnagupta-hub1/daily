@@ -295,7 +295,7 @@ def main():
                     delete_uid=row['UID']
                 )
                 _save_data()
-                st.experimental_rerun()
+                st.rerun()
     else:
         st.info("No DSA entries yet.")
 
@@ -344,7 +344,7 @@ def main():
             )
             _save_data()
             st.success("Added Study topic and rescheduled!")
-            st.experimental_rerun()
+            st.rerun()
 
     if go2:
         if not fun_topic.strip():
@@ -364,7 +364,7 @@ def main():
             st.session_state.dsa_sheet = reschedule_dsa_with_interruptions(st.session_state.dsa_sheet)
             _save_data()
             st.success("Added new Break/Fun activity!")
-            st.experimental_rerun()
+            st.rerun()
 
     if go3:
         if not waste_reason.strip():
@@ -384,7 +384,7 @@ def main():
             st.session_state.dsa_sheet = reschedule_dsa_with_interruptions(st.session_state.dsa_sheet)
             _save_data()
             st.success("Logged wasted time as Break!")
-            st.experimental_rerun()
+            st.rerun()
 
     st.markdown("---")
     st.markdown("Made with ❤️ for efficient DSA prep! [Perplexity AI App Example]")
