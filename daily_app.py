@@ -113,7 +113,7 @@ if "dsa_sheet" not in st.session_state:
     st.session_state.dsa_sheet = copy.deepcopy(DEFAULT_DATA)
 
 def _save_data():
-    # Persistence placeholder (extend as needed)
+    # Add your persistence logic here if needed
     pass
 
 def expand_all_ranges(rows):
@@ -134,6 +134,7 @@ def expand_all_ranges(rows):
 
 def reschedule_dsa(entries, new_topic=None, delete_uid=None):
     events = copy.deepcopy(entries)
+
     if delete_uid:
         events = [e for e in events if e['UID'] != delete_uid]
 
@@ -143,7 +144,7 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
     break_intervals = []
     for b in breaks:
         for _, s, e in expand_all_ranges([b]):
-            break_intervals.append((s,e))
+            break_intervals.append((s, e))
     break_intervals.sort()
 
     new_topic_intervals = []
@@ -159,7 +160,7 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
             }
         ))
 
-    locked_intervals = [*[(s,e,b) for b,s,e in [(b,) + bi for bi in break_intervals]]]
+    locked_intervals = [*[(s, e, b) for b, s, e in [(b,) + bi for bi in break_intervals]]]
     for ni in new_topic_intervals:
         locked_intervals.append(ni)
     locked_intervals.sort(key=lambda x: x[0])
@@ -181,20 +182,19 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
         else:
             segs_orig = []
             for _, s, e in expand_all_ranges([topic]):
-                segs_orig.append((s,e))
+                segs_orig.append((s, e))
             segs = []
             for seg in segs_orig:
-                splits = split_topic_by_breaks(seg, break_intervals)
-                segs.extend(splits)
+                segments = split_topic_by_breaks(seg, break_intervals)
+                segs.extend(segments)
 
         for idx_seg, (seg_start, seg_end) in enumerate(segs):
             key = topic['Topic']
             topic_splits_count[key] = topic_splits_count.get(key, 0) + 1
             split_num = topic_splits_count[key]
 
-            display_topic = (f"{topic['Topic']} (part {split_num})" if len(segs) > 1 else topic['Topic'])
+            display_topic = f"{topic['Topic']} (part {split_num})" if len(segs) > 1 else topic['Topic']
             days = days_between(seg_start, seg_end)
-            # Create fresh UID
             uid = get_uid()
 
             scheduled.append({
@@ -243,7 +243,7 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
                 if ev_start <= new_e and ev_end >= new_s:
                     new_start = new_e + datetime.timedelta(days=1)
                     days = ev["Days"]
-                    ev["Date Range"] = daterange_fmt(new_start, new_start + datetime.timedelta(days=days-1))
+                    ev["Date Range"] = daterange_fmt(new_start, new_start + datetime.timedelta(days=days - 1))
 
     for idx, ev in enumerate(scheduled, 1):
         ev["S No."] = idx
@@ -265,7 +265,7 @@ def main():
         st.markdown("### Delete any row:")
         for i, row in df.iterrows():
             col1, col2 = st.columns([8, 2])
-            s_no = row['S No.'] if 'S No.' in row else i + 1
+            s_no = row.get('S No.', i + 1)
             col1.markdown(f"**{s_no}. {row['Type']} — {row['Topic']}** ({row['Date Range']})")
             delete_clicked = col2.button(f"🗑️ Delete", key=f"del_{row['UID']}_{i}")
             if delete_clicked:
