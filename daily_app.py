@@ -39,6 +39,11 @@ def next_day(d):
         d = d.date()
     return d + datetime.timedelta(days=1)
 
+def prev_day(d):
+    if isinstance(d, pd.Timestamp):
+        d = d.date()
+    return d - datetime.timedelta(days=1)
+
 def days_between(start, end):
     if isinstance(start, pd.Timestamp):
         start = start.date()
@@ -46,36 +51,39 @@ def days_between(start, end):
         end = end.date()
     return (end - start).days + 1
 
-def subtract_intervals(interval, blockers):
-    """
-    Given interval (start,end) and a list of blocker intervals [(s,e),...],
-    return list of intervals representing parts of interval excluding blockers.
-    Assumes blocker intervals do not overlap and are sorted.
-    """
-    start, end = interval
-    result = []
-    current_start = start
+def split_topic_by_breaks(topic_interval, breaks_sorted):
+    topic_start, topic_end = topic_interval
+    blocking_intervals = []
+    for b_start, b_end in breaks_sorted:
+        if not (b_end < topic_start or b_start > topic_end):
+            blocking_intervals.append((
+                max(topic_start, b_start),
+                min(topic_end, b_end)
+            ))
+    if not blocking_intervals:
+        return [(topic_start, topic_end)]
 
-    for b_start, b_end in blockers:
-        if b_end < current_start:
-            continue
-        if b_start > end:
-            break
-        # If blocker starts before current_start, move to blocker end+1
-        if b_start <= current_start <= b_end:
-            current_start = next_day(b_end)
-            continue
-        # blocker after current_start but before end
-        if current_start < b_start:
-            block_interval_end = prev_day(b_start)
-            if block_interval_end >= current_start:
-                result.append((current_start, min(block_interval_end, end)))
-            current_start = next_day(b_end)
-    if current_start <= end:
-        result.append((current_start, end))
-    return result
+    blocking_intervals.sort()
+    merged_blocks = []
+    current_s, current_e = blocking_intervals[0]
+    for s, e in blocking_intervals[1:]:
+        if s <= current_e + datetime.timedelta(days=1):
+            current_e = max(current_e, e)
+        else:
+            merged_blocks.append((current_s, current_e))
+            current_s, current_e = s, e
+    merged_blocks.append((current_s, current_e))
 
-# DEFAULT DATA initialization (same as before)
+    result_segments = []
+    current_pos = topic_start
+    for b_s, b_e in merged_blocks:
+        if current_pos < b_s:
+            result_segments.append((current_pos, b_s - datetime.timedelta(days=1)))
+        current_pos = b_e + datetime.timedelta(days=1)
+    if current_pos <= topic_end:
+        result_segments.append((current_pos, topic_end))
+    return result_segments
+
 DEFAULT_DATA = [
     {"Type": "DSA", "Topic": "LinkedList", "Days": 9, "Date Range": "27/07/25 – 04/08/25", "Notes": "", "UID": get_uid()},
     {"Type": "DSA", "Topic": "Recursion", "Days": 6, "Date Range": "05/08/25 – 10/08/25", "Notes": "", "UID": get_uid()},
@@ -124,48 +132,6 @@ def expand_all_ranges(rows):
                 out.append((row, start, end))
     return out
 
-def split_topic_by_breaks(topic_interval, breaks_sorted):
-    """Given (start,end) of topic and sorted list of break intervals,
-    return list of (start,end) segments of topic split only at breaks."""
-    topic_start, topic_end = topic_interval
-    # Collect break intervals overlapping or between topic start-end
-    blocking_intervals = []
-    for b_start, b_end in breaks_sorted:
-        # Only consider breaks that overlap or are within topic interval
-        if not (b_end < topic_start or b_start > topic_end):
-            # Clip break to topic bounds
-            blocking_intervals.append((
-                max(topic_start, b_start),
-                min(topic_end, b_end)
-            ))
-    # Sort and merge overlapping/adjacent blocks:
-    if not blocking_intervals:
-        return [(topic_start, topic_end)]
-
-    blocking_intervals.sort()
-    merged_blocks = []
-    current_s, current_e = blocking_intervals[0]
-
-    for s, e in blocking_intervals[1:]:
-        if s <= current_e + datetime.timedelta(days=1):
-            current_e = max(current_e, e)
-        else:
-            merged_blocks.append((current_s, current_e))
-            current_s, current_e = s, e
-    merged_blocks.append((current_s, current_e))
-
-    # Now subtract blocking intervals from topic interval
-    result_segments = []
-    current_pos = topic_start
-    for b_s, b_e in merged_blocks:
-        if current_pos < b_s:
-            # Append segment before break
-            result_segments.append((current_pos, b_s - datetime.timedelta(days=1)))
-        current_pos = b_e + datetime.timedelta(days=1)
-    if current_pos <= topic_end:
-        result_segments.append((current_pos, topic_end))
-    return result_segments
-
 def reschedule_dsa(entries, new_topic=None, delete_uid=None):
     """
     Reschedules DSA topics with splitting only at Break boundaries.
@@ -199,118 +165,45 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
             }
         ))
 
-    # Build combined timeline of breaks + new_topic to lock dates
+    # Build combined locked intervals: breaks + new topic locked
     locked_intervals = [*[(s,e,b) for b,s,e in [(b,) + bi for bi in break_intervals]]]
     for ni in new_topic_intervals:
         locked_intervals.append(ni)
-    # Sort locked intervals by start date (ignoring the objects for sorting)
     locked_intervals.sort(key=lambda x: x[0])
 
-    # Scheduled result events list
-    scheduled = []
-
-    # Helper: find next free date after given date (not in locked)
-    def next_free_date_from(date, after_locked):
-        d = date
-        locked_starts = [li[0] for li in after_locked]
-        locked_ends = [li[1] for li in after_locked]
-        while True:
-            # Check if d in any locked interval
-            in_locked = False
-            for s,e,_ in after_locked:
-                if s <= d <= e:
-                    in_locked = True
-                    d = e + datetime.timedelta(days=1)
-                    break
-            if not in_locked:
-                return d
-
-    # Start from earliest min date of schedule or today
-    all_dates = []
-    for row, s, e in expand_all_ranges(events):
-        all_dates.append(s)
-    base_date = min(all_dates) if all_dates else datetime.date.today()
-
-    # Position pointer for scheduling
-    cursor = base_date
-
-    # To number splits like 1, 1.1, 1.2 for split topics
     topic_splits_count = {}
 
-    # List topics in order of their earliest start date (combine multi-ranges if needed by earliest)
+    # Sort DSA topics by earliest start
     def earliest_start(r):
         drs = r["Date Range"].split(",")
         starts = [parse_date(d.split("–")[0].strip()) for d in drs]
         return min(starts)
 
     dsa_sorted = sorted(dsa, key=earliest_start)
-    # Insert new topic into dsa_sorted at correct place (remove any duplicates if same topic)
 
-    if new_topic:
-        # Remove any existing topics identical by name? No, keep all
-        pass
-
-    # Build a "new" schedule with locked breaks and new topic as fixed
-    # We'll assign new dates to DSA topics, split only at breaks
-
-    def get_blocks():
-        # return list of locked intervals + new topic intervals as (start,end,obj)
-        blocks = []
-        for s,e,b in locked_intervals:
-            blocks.append((s,e,b))
-        return blocks
-
-    blocks = get_blocks()
-
-    # Sort blocks by start date
-    blocks.sort(key=lambda x: x[0])
-
-    # We'll keep track of the locked intervals as a set of dates for quick lookup
-    locked_dates = set()
-    for s,e,_ in blocks:
-        current = s
-        while current <= e:
-            locked_dates.add(current)
-            current = current + datetime.timedelta(days=1)
-
-    # After placing breaks & new topic locked, schedule each DSA topic
+    scheduled = []
 
     for topic in dsa_sorted:
-        # If this is the new_topic (by Topic name), schedule it at user requested dates
+        # If topic equals new topic, use new topic dates for scheduling
         if new_topic and topic["Topic"] == new_topic['topic']:
-            # use new_topic start/end as interval
             segs = [(new_topic['start'], new_topic['end'])]
         else:
-            # Get all original date ranges for this topic (can be multiple)
             segs_orig = []
-            for _,s,e in expand_all_ranges([topic]):
+            for _, s, e in expand_all_ranges([topic]):
                 segs_orig.append((s,e))
-
             segs = []
-            # For each original range, split by breaks only
             for seg in segs_orig:
                 splits = split_topic_by_breaks(seg, break_intervals)
                 segs.extend(splits)
 
-        # For each segment scheduled, assign dates respecting locked intervals and cursor,
-        # actually we follow original segment dates (because breaks fixed)
-        # But if the new_topic overlaps, stretch other topics after it.
-
         for idx_seg, (seg_start, seg_end) in enumerate(segs):
-            # Find number for split (1-based index) per topic
             key = topic['Topic']
             topic_splits_count[key] = topic_splits_count.get(key, 0) + 1
             split_num = topic_splits_count[key]
 
-            # Format topic name with split only if >1 segment
-            if len(segs) > 1:
-                display_topic = f"{topic['Topic']} (part {split_num})"
-            else:
-                display_topic = topic['Topic']
-
+            display_topic = (f"{topic['Topic']} (part {split_num})" if len(segs) > 1 else topic['Topic'])
             days = days_between(seg_start, seg_end)
 
-            # Add scheduled entry
             scheduled.append({
                 "S No.": 0,
                 "Type": "DSA",
@@ -318,13 +211,11 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
                 "Days": days,
                 "Date Range": daterange_fmt(seg_start, seg_end),
                 "Notes": topic.get("Notes", ""),
-                "UID": topic.get("UID", get_uid())
+                "UID": get_uid()
             })
 
-    # Add breaks separately at their fixed positions
-    # Breaks already have date ranges, add them as is
+    # Add breaks as fixed rows
     for b in breaks:
-        # for multi date ranges, keep as separate rows (if needed)
         drs = b["Date Range"].split(",")
         for dr in drs:
             dr = dr.strip()
@@ -344,54 +235,27 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
                 "UID": b.get("UID", get_uid())
             })
 
-    # Add any new_topic breaks for safety if new_topic is Break (rare)
-    if new_topic and new_topic.get('type',"DSA") == "Break":
-        start = new_topic['start']
-        end = new_topic['end']
-        days = days_between(start,end)
-        scheduled.append({
-            "S No.": 0,
-            "Type": "Break",
-            "Topic": new_topic['topic'],
-            "Days": days,
-            "Date Range": daterange_fmt(start,end),
-            "Notes": new_topic.get("note",""),
-            "UID": get_uid()
-        })
-
     # Sort all scheduled by start date
     def start_date(ev):
         return parse_date(ev["Date Range"].split("–")[0].strip())
 
     scheduled.sort(key=start_date)
 
-    # Now resolve date overlaps with inserted new topic:
-    # We push DSA topics after new topic if overlapping
+    # Push overlapping DSA topics after new topic date if needed
     if new_topic:
         new_s = new_topic['start']
         new_e = new_topic['end']
-        pushed_dates = []
-
-        # Since breaks fixed, only shift DSA topics starting after new_s if overlap
 
         for ev in scheduled:
             if ev["Type"] == "DSA":
                 ev_start = parse_date(ev["Date Range"].split("–")[0].strip())
                 ev_end = parse_date(ev["Date Range"].split("–")[-1].strip())
-
-                # Overlap condition
                 if ev_start <= new_e and ev_end >= new_s:
-                    # Need to push this event to after new_e
-                    push_by = (new_e - ev_start) + datetime.timedelta(days=1)
                     new_start = new_e + datetime.timedelta(days=1)
-
-                    # Calculate days count same as before
                     days = ev["Days"]
-
                     ev["Date Range"] = daterange_fmt(new_start, new_start + datetime.timedelta(days=days-1))
-                    # Note: This simplified logic pushes overlapping events forward to start the day after new topic ends
 
-    # Re-number
+    # Re-number S No.
     for idx, ev in enumerate(scheduled, 1):
         ev["S No."] = idx
 
@@ -399,18 +263,14 @@ def reschedule_dsa(entries, new_topic=None, delete_uid=None):
 
 def main():
     st.title("📅 DSA Sheet Scheduler (Daily App)")
+    st.info("Add study topics, breaks, or fun/wasted events below! Schedule splits topics only at breaks. Breaks stay fixed. Delete or add rows as needed.")
 
-    st.info(
-        "Add study topics, breaks, or fun/wasted events below! Schedule splits topics only at breaks. Breaks stay fixed. Delete or add rows as needed."
-    )
-
-    # Reschedule at start to have fresh dates & splits
+    # Reschedule fresh
     st.session_state.dsa_sheet = reschedule_dsa(st.session_state.dsa_sheet)
     df = pd.DataFrame(st.session_state.dsa_sheet)
 
     if not df.empty:
         st.subheader("DSA Schedule Table")
-
         show_df = df.drop(columns=["UID"])
         st.dataframe(show_df, use_container_width=True)
 
@@ -419,12 +279,10 @@ def main():
             col1, col2 = st.columns([8, 2])
             s_no = row['S No.'] if 'S No.' in row else i + 1
             col1.markdown(f"**{s_no}. {row['Type']} — {row['Topic']}** ({row['Date Range']})")
-            delete_clicked = col2.button(f"🗑️ Delete", key=f"del_{row['UID']}")
+            # Use index i and UID together in key for uniqueness
+            delete_clicked = col2.button(f"🗑️ Delete", key=f"del_{row['UID']}_{i}")
             if delete_clicked:
-                st.session_state.dsa_sheet = reschedule_dsa(
-                    st.session_state.dsa_sheet,
-                    delete_uid=row['UID']
-                )
+                st.session_state.dsa_sheet = reschedule_dsa(st.session_state.dsa_sheet, delete_uid=row['UID'])
                 _save_data()
                 st.experimental_rerun()
     else:
@@ -491,7 +349,6 @@ def main():
                 "UID": get_uid()
             }
             st.session_state.dsa_sheet.append(new_break)
-            # No new topic insertion, just reschedule to maintain order
             st.session_state.dsa_sheet = reschedule_dsa(st.session_state.dsa_sheet)
             _save_data()
             st.success("Added new Break/Fun activity!")
