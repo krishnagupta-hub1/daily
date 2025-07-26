@@ -3,8 +3,12 @@ import pandas as pd
 import datetime
 import uuid
 import copy
+import json
+import os
 
 st.set_page_config(page_title="DSA Daily Scheduler", layout="wide")
+
+DATA_FILENAME = "dsa_schedule.json"
 
 def date_fmt(dt):
     if isinstance(dt, pd.Timestamp):
@@ -46,7 +50,26 @@ def prev_day(d):
         d = d.date()
     return d - datetime.timedelta(days=1)
 
-# Full original DEFAULT_DATA from your initial code:
+# Persistence helpers
+
+def save_data_to_file():
+    try:
+        with open(DATA_FILENAME, "w") as f:
+            json.dump(st.session_state.dsa_sheet, f, default=str)
+    except Exception as e:
+        st.error(f"Error saving data: {e}")
+
+def load_data_from_file():
+    if os.path.exists(DATA_FILENAME):
+        try:
+            with open(DATA_FILENAME, "r") as f:
+                data = json.load(f)
+                return data
+        except Exception as e:
+            st.error(f"Error loading data: {e}")
+    return None
+
+# Full original DEFAULT_DATA from your initial code (with proper dates & UIDs)
 DEFAULT_DATA = [
     {"Type": "DSA", "Topic": "LinkedList", "Days": 9, "Date Range": "27/07/25 – 04/08/25", "Notes": "", "UID": get_uid()},
     {"Type": "DSA", "Topic": "Recursion", "Days": 6, "Date Range": "05/08/25 – 10/08/25", "Notes": "", "UID": get_uid()},
@@ -73,10 +96,11 @@ DEFAULT_DATA = [
 ]
 
 if "dsa_sheet" not in st.session_state:
-    st.session_state.dsa_sheet = copy.deepcopy(DEFAULT_DATA)
-
-def _save_data():
-    pass  # persistence placeholder
+    loaded = load_data_from_file()
+    if loaded:
+        st.session_state.dsa_sheet = loaded
+    else:
+        st.session_state.dsa_sheet = copy.deepcopy(DEFAULT_DATA)
 
 def expand_date_ranges(row):
     drs = row["Date Range"].split(",")
@@ -239,7 +263,6 @@ def reschedule_with_interruptions(entries, new_topic=None, delete_uid=None):
     topic_order = sorted(topic_groups.keys(), key=lambda k: min(ev["Start"] for ev in topic_groups[k]))
 
     result = []
-    current_sno = 1
     for group_idx, grp_key in enumerate(topic_order, 1):
         evs = topic_groups[grp_key]
         if grp_key[0] == "DSA":
@@ -259,14 +282,14 @@ def reschedule_with_interruptions(entries, new_topic=None, delete_uid=None):
 
     return result
 
-
 def main():
-    st.title("📅 DSA Sheet Scheduler with Full Topics and Interruptions")
+    st.title("📅 DSA Daily Scheduler with Persistence & Interruptions")
 
     st.info(
-        "Add a new DSA study topic to split (interrupt) existing topics by dates.\n"
-        "Breaks are fixed and preserved.\n"
-        "Deleting and adding rows updates schedule appropriately."
+        "Add new DSA study topics to split existing overlapping topics appropriately.\n"
+        "Breaks remain fixed.\n"
+        "Your schedule is saved locally and changes persist on refresh.\n"
+        "Delete rows or add new entries to update your schedule instantly."
     )
 
     st.session_state.dsa_sheet = reschedule_with_interruptions(st.session_state.dsa_sheet)
@@ -282,7 +305,7 @@ def main():
             col1.markdown(f"**{row['S No.']} {row['Type']} — {row['Topic']}** ({row['Date Range']})")
             if col2.button("🗑️ Delete", key=f"del_{row['UID']}"):
                 st.session_state.dsa_sheet = reschedule_with_interruptions(st.session_state.dsa_sheet, delete_uid=row['UID'])
-                _save_data()
+                save_data_to_file()
                 st.rerun()
                 return
     else:
@@ -313,7 +336,7 @@ def main():
                 "note": study_notes.strip(),
             }
             st.session_state.dsa_sheet = reschedule_with_interruptions(st.session_state.dsa_sheet, new_topic=new_topic_input)
-            _save_data()
+            save_data_to_file()
             st.success(f"Added study topic '{study_topic.strip()}' and rescheduled.")
             st.rerun()
             return
@@ -321,4 +344,5 @@ def main():
     st.markdown("---")
     st.markdown("Made with ❤️ for efficient DSA prep!")
 
+# Run main at top-level for Streamlit
 main()
