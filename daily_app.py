@@ -389,5 +389,5 @@ def main():
     st.markdown("---")
     st.markdown("Made with ❤️ for efficient DSA prep! [Perplexity AI App Example]")
 
-if __name__ == "__main__":
-    main()
+# ---- Streamlit best-practice: just call main() at global scope ---
+main()
