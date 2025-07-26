@@ -2,19 +2,18 @@ import streamlit as st
 import pandas as pd
 import datetime
 import uuid
+import copy
 
 st.set_page_config(page_title="DSA Daily Scheduler", layout="wide")
 
 ####### ---------- HELPER FUNCTIONS ------------- #######
 
 def date_fmt(dt):
-    """Format datetime.date as dd/mm/yy string."""
     if isinstance(dt, pd.Timestamp):
         dt = dt.date()
     return dt.strftime('%d/%m/%y')
 
 def daterange_fmt(start, end):
-    """Format start-end date range to string."""
     if isinstance(start, pd.Timestamp):
         start = start.date()
     if isinstance(end, pd.Timestamp):
@@ -24,25 +23,20 @@ def daterange_fmt(start, end):
     return f"{date_fmt(start)} – {date_fmt(end)}"
 
 def parse_date(s):
-    """Parse date string dd/mm/yy to datetime.date."""
     try:
         return datetime.datetime.strptime(s, "%d/%m/%y").date()
     except Exception:
-        # Sometimes range might have invalid format, ignore
         return None
 
 def overlaps(a_start, a_end, b_start, b_end):
-    """Check if two date intervals overlap."""
     if any(v is None for v in [a_start,a_end,b_start,b_end]):
         return False
     return a_start <= b_end and b_start <= a_end
 
 def get_uid():
-    """Generate unique ID."""
     return str(uuid.uuid4())
 
 def next_day(d):
-    """Return next day as datetime.date."""
     if isinstance(d, pd.Timestamp):
         d = d.date()
     return d + datetime.timedelta(days=1)
@@ -55,7 +49,7 @@ def prev_day(d):
 ###### --------- DATA AND INITIALIZATION ---------- ######
 
 DEFAULT_DATA = [
-    # Sample rows from your initial data
+    # Your initial schedule entries
     {"Type": "DSA", "Topic": "LinkedList", "Days": 9, "Date Range": "27/07/25 – 04/08/25", "Notes": "", "UID": get_uid()},
     {"Type": "DSA", "Topic": "Recursion", "Days": 6, "Date Range": "05/08/25 – 10/08/25", "Notes": "", "UID": get_uid()},
     {"Type": "DSA", "Topic": "Bit Manipulation (Part 1)", "Days": 3, "Date Range": "11/08/25 – 13/08/25", "Notes": "", "UID": get_uid()},
@@ -81,21 +75,15 @@ DEFAULT_DATA = [
 ]
 
 if "dsa_sheet" not in st.session_state:
-    # Make a deep copy on initial load
-    import copy
     st.session_state.dsa_sheet = copy.deepcopy(DEFAULT_DATA)
 
 def _save_data():
-    # Placeholder for persistence if needed (e.g. save to file/db)
+    # Placeholder for persistence logic
     pass
 
 ###### ---------- ADVANCED RESCHEDULING CORE ---------- ######
 
 def expand_all_ranges(rows):
-    """
-    Expand all date ranges (including multiple ranges separated by comma)
-    into list of (row, start_date, end_date) tuple.
-    """
     out = []
     for row in rows:
         drs = row["Date Range"].split(",")
@@ -106,44 +94,29 @@ def expand_all_ranges(rows):
                 start = parse_date(parts[0].strip())
                 end = parse_date(parts[1].strip())
             else:
-                start = end = parse_date(dr.strip())
+                start = end = parse_date(dr)
             if start is not None and end is not None:
                 out.append((row, start, end))
     return out
 
 def reschedule_dsa_with_interruptions(entries, new_topic=None, delete_uid=None):
-    """
-    Rebuild and reschedule complete schedule from entries,
-    optionally inserting a new DSA topic, or deleting a topic by UID.
-    Breaks are locked and never rescheduled or split.
-    DSA topics can be split and renumbered.
-    """
-
-    import copy
-    # Deep copy list to avoid mutation issues
     events = copy.deepcopy(entries)
-
-    # Remove deleted row by UID if specified
     if delete_uid:
         events = [e for e in events if e['UID'] != delete_uid]
 
-    # Separate breaks and DSA
     breaks = [e for e in events if e["Type"] == "Break"]
     dsa = [e for e in events if e["Type"] == "DSA"]
 
-    # Compose list of all initial dates to find earliest start date
     all_dates = []
     for r, s, e in expand_all_ranges(events):
         all_dates.append(s)
     base_date = min(all_dates) if all_dates else datetime.date.today()
 
-    # Build list of locked intervals (breaks) with actual intervals
     locked = []
     for b in breaks:
         for _, s, e in expand_all_ranges([b]):
             locked.append((s, e, b))
 
-    # If new_topic provided (insertion), add it as interruption locked interval
     interruptions = []
     if new_topic:
         interruptions.append((
@@ -157,7 +130,6 @@ def reschedule_dsa_with_interruptions(entries, new_topic=None, delete_uid=None):
             }
         ))
 
-    # Expand existing DSA topics into day-wise segments list
     all_dsa_segments = []
     for d in dsa:
         for _, start, end in expand_all_ranges([d]):
@@ -168,10 +140,7 @@ def reschedule_dsa_with_interruptions(entries, new_topic=None, delete_uid=None):
                 "Notes": d.get("Notes", ""),
             }] * length)
 
-    # We'll now construct the full schedule day-by-day.
-
-    # Build a set of protected days (breaks + new topic)
-    protected_days_map = {}  # date -> locked event dict
+    protected_days_map = {}
     for s, e, ev in locked + interruptions:
         d = s
         while d <= e:
@@ -185,9 +154,7 @@ def reschedule_dsa_with_interruptions(entries, new_topic=None, delete_uid=None):
 
     while dsa_pointer < len(all_dsa_segments) or current_date in protected_days_map:
         if current_date in protected_days_map:
-            # Handle break or interruption day(s)
             ev = protected_days_map[current_date]
-            # If last output event is same UID, extend the date range and days count
             if output and output[-1]['UID'] == ev['UID']:
                 output[-1]['Days'] += 1
                 start_str = output[-1]['Date Range'].split('–')[0].strip()
@@ -206,21 +173,17 @@ def reschedule_dsa_with_interruptions(entries, new_topic=None, delete_uid=None):
             continue
 
         if dsa_pointer >= len(all_dsa_segments):
-            # No more DSA days to fill, skip date or break out
             break
 
-        # Add a DSA day segment
         seg = all_dsa_segments[dsa_pointer]
         topic_name = seg["Topic"]
         dsa_topic_counts[topic_name] = dsa_topic_counts.get(topic_name, 0) + 1
         part_num = dsa_topic_counts[topic_name]
-        # If first segment for this topic use original name else mark continued
         if part_num == 1:
             display_topic = topic_name
         else:
             display_topic = f"{topic_name} (continued {part_num})"
 
-        # If previous output row has the same topic, extend its day count and update range
         if output and output[-1]['Type'] == "DSA" and output[-1]["Topic"] == display_topic:
             output[-1]['Days'] += 1
             start_str = output[-1]['Date Range'].split('–')[0].strip()
@@ -228,7 +191,7 @@ def reschedule_dsa_with_interruptions(entries, new_topic=None, delete_uid=None):
             output[-1]['Date Range'] = daterange_fmt(start_dt, current_date)
         else:
             output.append({
-                "S No.": 0,  # to be re-numbered later
+                "S No.": 0,
                 "Type": "DSA",
                 "Topic": display_topic,
                 "Days": 1,
@@ -239,16 +202,12 @@ def reschedule_dsa_with_interruptions(entries, new_topic=None, delete_uid=None):
         dsa_pointer += 1
         current_date = next_day(current_date)
 
-    # If some break/interruption days after DSA schedule ends, add them too
-    # Find last date scheduled:
     if output:
         last_date_str = output[-1]['Date Range'].split('–')[-1].strip()
         last_date = parse_date(last_date_str)
     else:
         last_date = base_date
 
-    # Add remaining break days after last_date if any
-    # Get breaks/interruption days after last_date
     extra_locked_days = []
     for s, e, ev in locked + interruptions:
         d = s
@@ -273,10 +232,8 @@ def reschedule_dsa_with_interruptions(entries, new_topic=None, delete_uid=None):
                 new_ev['UID'] = get_uid()
             output.append(new_ev)
 
-    # Sort all events by their start date
     output.sort(key=lambda x: parse_date(x["Date Range"].split("–")[0].strip()))
 
-    # Re-number S No.
     for idx, ev in enumerate(output, 1):
         ev["S No."] = idx
 
@@ -289,25 +246,23 @@ def main():
 
     st.info("Add study topics, breaks, or fun/wasted events below! Your DSA schedule will split/reschedule automatically to avoid date overlaps. Breaks stay fixed. You can delete any row. 'Save Notes' will store notes for each row.")
 
-    # --- Show Current Table (with DELETE per row) ---
+    # **Ensure schedule is always freshly rescheduled and S No. assigned**
+    st.session_state.dsa_sheet = reschedule_dsa_with_interruptions(st.session_state.dsa_sheet)
     df = pd.DataFrame(st.session_state.dsa_sheet)
 
     if not df.empty:
         st.subheader("DSA Schedule Table")
 
-        # Show as table with notes editable
-        # We cannot put buttons inside st.dataframe, so show simplified read-only table
-        # and provide delete buttons below per row.
-
-        # Display DataFrame with hidden UID column
+        # Display schedule table without UID column
         show_df = df.drop(columns=["UID"])
         st.dataframe(show_df, use_container_width=True)
 
-        # Delete row buttons:
+        # Delete row buttons per entry
         st.markdown("### Delete any row:")
-        for idx, row in df.iterrows():
-            col1, col2 = st.columns([8,2])
-            col1.markdown(f"**{row['S No.']}. {row['Type']} — {row['Topic']}** ({row['Date Range']})")
+        for i, row in df.iterrows():
+            col1, col2 = st.columns([8, 2])
+            s_no = row['S No.'] if 'S No.' in row else i + 1
+            col1.markdown(f"**{s_no}. {row['Type']} — {row['Topic']}** ({row['Date Range']})")
             if col2.button(f"🗑️ Delete", key=f"del_{row['UID']}"):
                 st.session_state.dsa_sheet = reschedule_dsa_with_interruptions(
                     st.session_state.dsa_sheet,
@@ -319,12 +274,11 @@ def main():
     else:
         st.info("No DSA entries yet.")
 
-    # ------ Add Study / Fun / Wasted (INPUT BARS) ------
+    # ------ Add Entry Forms ------
     today = datetime.date.today()
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("Add Entries")
 
-    # Green: Study (DSA)
     with st.form("add_study"):
         st.markdown("<div style='background:#e9ffe9;padding:10px;border-radius:6px;'><b>🟩 Add Study</b></div>", unsafe_allow_html=True)
         study_topic = st.text_input("Study Topic (e.g. Trees)", key="study_topic_input")
@@ -333,7 +287,6 @@ def main():
         study_note = st.text_input("Notes (optional)", key="study_note_input", value="✅ Manually Added")
         go1 = st.form_submit_button("➕ Add Study")
 
-    # Red: Fun/Break
     with st.form("add_fun"):
         st.markdown("<div style='background:#ffeaea;padding:10px;border-radius:6px;'><b>🟥 Add Fun Activity / Break</b></div>", unsafe_allow_html=True)
         fun_topic = st.text_input("Fun Topic (e.g. Movie)", key="fun_topic_input")
@@ -342,7 +295,6 @@ def main():
         fun_note = st.text_input("Fun Notes (optional)", key="fun_note_input", value="🎈 Fun/Enjoyment")
         go2 = st.form_submit_button("➕ Add Fun")
 
-    # Gray: Wasted
     with st.form("add_waste"):
         st.markdown("<div style='background:#efefef;padding:10px;border-radius:6px;'><b>⬜ Add Wasted Time</b></div>", unsafe_allow_html=True)
         waste_reason = st.text_input("Wasted Reason", key="waste_reason_input")
@@ -351,7 +303,6 @@ def main():
         waste_note = st.text_input("Waste Notes (optional)", key="waste_note_input", value="😓 Time Wasted")
         go3 = st.form_submit_button("➕ Add Wasted")
 
-    # Handling form submissions
     if go1:
         if not study_topic.strip():
             st.error("Please enter a study topic.")
@@ -386,7 +337,6 @@ def main():
                 "UID": get_uid()
             }
             st.session_state.dsa_sheet.append(new_break)
-            # Just reschedule without new DSA insert to preserve breaks
             st.session_state.dsa_sheet = reschedule_dsa_with_interruptions(st.session_state.dsa_sheet)
             _save_data()
             st.success("Added new Break/Fun activity!")
@@ -411,9 +361,6 @@ def main():
             _save_data()
             st.success("Logged wasted time as Break!")
             st.experimental_rerun()
-
-    # ------- Save Notes (Manual Editing in UI not implemented but you could add it) -------
-    # Could add an editable table or textareas per row if needed.
 
     st.markdown("---")
     st.markdown("Made with ❤️ for efficient DSA prep! [Perplexity AI App Example]")
